@@ -1,4 +1,4 @@
-FONT_SIZE ?= 12
+FONT_SIZE ?= 36
 CFLAGS = -O3 -DFONT_SIZE=${FONT_SIZE}
 PROGS = shapes chars tt mono
 

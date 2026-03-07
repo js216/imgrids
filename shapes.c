@@ -220,10 +220,7 @@ static void draw_atlas(void)
 
 static char get_char(void)
 {
-    static unsigned char c = 0;
-    unsigned char out = c;
-    c = (c + 1) % NUM_GLYPHS;
-    return (char)out;
+   return (unsigned char)(32 + rand() % (126 - 32 + 1));
 }
 
 /* -------------------------------------------------------------------------

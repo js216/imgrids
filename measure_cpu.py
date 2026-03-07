@@ -1,67 +1,81 @@
 #!/usr/bin/env python3
 """
-measure_cpu.py — run each program for DURATION seconds, report peak CPU usage.
-Usage: python3 measure_cpu.py
+measure_cpu.py — build each program at multiple font sizes and measure peak CPU.
 
-Resolution: at CLK_TCK=100 and INTERVAL=1.0, smallest measurable step is
-1 tick / 100 ticks/sec / 1 sec * 100 = 1%.  Reduce INTERVAL to trade
-resolution for responsiveness, but don't go below ~0.5s.
+For each font size, runs `make clean && make FONT_SIZE=N`, then times each
+program and prints a Markdown table of peak CPU percentages.
 """
 
-import subprocess, time, os
+import subprocess, time, os, sys
 
-DURATION  = 4    # seconds to run each program
-INTERVAL  = 1.0   # sampling interval — 1s gives ~1% resolution at CLK_TCK=100
+DURATION  = 4
+INTERVAL  = 1.0
 CLK_TCK   = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
-OUTPUT    = "cpu_results.txt"
+FONT_SIZES = [12, 24, 36, 64]
 
 PROGRAMS = [
     ("shapes", ["./shapes"]),
     ("chars",  ["./chars"]),
-    ("mono",   ["./mono",  "Roboto-Regular.font"]),
+    ("mono",   ["./mono",  "RobotoMono-Regular.font"]),
     ("tt",     ["./tt",    "Roboto-Regular.font"]),
 ]
 
 def read_stat(pid):
-    """Return utime+stime in ticks from /proc/pid/stat."""
     with open(f"/proc/{pid}/stat") as f:
         fields = f.read().split()
     return int(fields[13]) + int(fields[14])
 
-def measure(label, cmd):
-    proc = subprocess.Popen(cmd)
+def measure(cmd):
+    proc = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
     pid  = proc.pid
     peak = 0.0
-
-    time.sleep(0.2)  # brief pause for process to start
-
+    time.sleep(0.2)
     prev_ticks = read_stat(pid)
     prev_time  = time.monotonic()
-
-    deadline = time.monotonic() + DURATION
+    deadline   = time.monotonic() + DURATION
     while time.monotonic() < deadline:
         time.sleep(INTERVAL)
         try:
             cur_ticks = read_stat(pid)
         except FileNotFoundError:
             break
-
-        cur_time   = time.monotonic()
-        cpu_pct    = (cur_ticks - prev_ticks) / CLK_TCK / (cur_time - prev_time) * 100.0
-
+        cur_time = time.monotonic()
+        cpu_pct  = (cur_ticks - prev_ticks) / CLK_TCK / (cur_time - prev_time) * 100.0
         if cpu_pct > peak:
             peak = cpu_pct
-
         prev_ticks = cur_ticks
         prev_time  = cur_time
-
     proc.terminate()
     proc.wait()
+    return peak
 
-    result = f"{label:<20} peak CPU: {peak:.1f}%"
-    print(result)
-    return result
+def build(font_size):
+    print(f"  building FONT_SIZE={font_size}...", flush=True)
+    subprocess.run(["make", "clean"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["make", f"FONT_SIZE={font_size}"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-results = []
-for label, cmd in PROGRAMS:
-    results.append(measure(label, cmd))
+# results[label][font_size] = peak%
+results = {label: {} for label, _ in PROGRAMS}
+
+for size in FONT_SIZES:
+    print(f"\nFont size {size}pt:", flush=True)
+    build(size)
+    for label, cmd in PROGRAMS:
+        print(f"  measuring {label}...", flush=True)
+        peak = measure(cmd)
+        results[label][size] = peak
+
+# Print Markdown table
+col_w = 8
+header = f"| {'Program':<10} |" + "".join(f" {str(s)+'pt':>{col_w}} |" for s in FONT_SIZES)
+sep    = f"| {'-'*10} |" + "".join(f" {'-'*col_w} |" for s in FONT_SIZES)
+print(f"\n{header}")
+print(sep)
+for label, _ in PROGRAMS:
+    row = f"| {label:<10} |"
+    for size in FONT_SIZES:
+        cell = f"{results[label][size]:.1f}%"
+        row += f" {cell:>{col_w}} |"
+    print(row)
