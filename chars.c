@@ -33,9 +33,13 @@
 #define WIN_W      800
 #define WIN_H      480
 
+#ifndef FONT_SIZE
+#define FONT_SIZE 24
+#endif
+
 #define NUM_GLYPHS 128   /* one slot per ASCII code point (matches font8x8) */
-#define GLYPH_W    16   /* pixel width of one scaled glyph cell            */
-#define GLYPH_H    16   /* pixel height of one scaled glyph cell           */
+#define GLYPH_W    FONT_SIZE   /* pixel width of one scaled glyph cell            */
+#define GLYPH_H    FONT_SIZE   /* pixel height of one scaled glyph cell           */
 
 /* Source font dimensions — fixed by font8x8_basic.h */
 #define FONT_W     8

@@ -31,9 +31,13 @@
 #define WIN_W      800
 #define WIN_H      480
 
+#ifndef FONT_SIZE
+#define FONT_SIZE 24
+#endif
+
 #define NUM_GLYPHS 128   /* one slot per printable-ish ASCII code point */
-#define GLYPH_W    50    /* pixel width of one glyph cell                */
-#define GLYPH_H    50    /* pixel height of one glyph cell               */
+#define GLYPH_W    FONT_SIZE /* pixel width of one glyph cell                */
+#define GLYPH_H    FONT_SIZE /* pixel height of one glyph cell               */
 
 /* Number of glyph cells that fit in the window */
 #define COLS  (WIN_W / GLYPH_W)   /* 13 */
