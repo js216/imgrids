@@ -4,22 +4,20 @@ font_to_bin.py — render ASCII 32–126 from a TTF and emit a binary font file.
 
 Usage:
     python3 font_to_bin.py Roboto.ttf 12 > Roboto.font
-    # or as a Makefile rule:
-    # %.font: %.ttf
-    #     python3 font_to_bin.py $< 12 > $@
 
-Binary format (all values little-endian uint32):
-    [4]  cell_w       — fixed cell width (widest glyph, all others padded)
-    [4]  cell_h       — cell height = font_size * 1.5
-    [128 * cell_w * cell_h]  alpha masks, one per ASCII slot (0=bg, 255=fg)
-                             slots 0-31 and 127 are zeroed (unused)
+Makefile rule:
+    %.font: %.ttf
+        python3 font_to_bin.py $< $(FONT_SIZE) > $@
 
-The receiver composites each mask against its chosen fg+bg colours once at
-startup; the main loop then does nothing but memcpy.
+Binary format (little-endian):
+    [4]         cell_h              — shared height for all glyphs (= font_size * 1.5)
+    [128 x 2]   advance_w[code]     — per-glyph width in pixels (uint16); 0 = unused slot
+    per glyph:  advance_w[code] * cell_h bytes of uint8 alpha mask, packed
+                sequentially for code 0..127.  Slots with advance_w==0 emit no bytes.
+                alpha 0 = transparent background, 255 = full foreground ink.
 """
 
 import sys, struct, math
-from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 if len(sys.argv) != 3:
@@ -31,8 +29,8 @@ font_size = int(sys.argv[2])
 
 CELL_H      = int(font_size * 1.5)
 SUPERSAMPLE = 4
-render_size = font_size  * SUPERSAMPLE
-render_h    = CELL_H     * SUPERSAMPLE
+render_size = font_size * SUPERSAMPLE
+render_h    = CELL_H    * SUPERSAMPLE
 
 ASCII_FIRST = 32
 ASCII_LAST  = 126
@@ -43,32 +41,29 @@ except OSError as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 
-def render_glyph_alpha(char, out_w, out_h):
-    """Render char at supersample resolution, downsample to out_w x out_h,
-    return list of out_w*out_h uint8 alpha values (row-major)."""
+def render_glyph(char, out_w):
+    """Render char at supersample resolution, downsample to out_w x CELL_H.
+    Returns list of out_w * CELL_H uint8 alpha values (row-major)."""
     advance_render = max(1, math.ceil(font.getlength(char)))
     img = Image.new("L", (advance_render, render_h), 0)
     ImageDraw.Draw(img).text((0, 0), char, font=font, fill=255)
-    small = img.resize((out_w, out_h), Image.LANCZOS)
+    small = img.resize((out_w, CELL_H), Image.LANCZOS)
     return list(small.getdata())
 
-# --- measure widest glyph to determine CELL_W ---
-cell_w = 1
+# Measure each glyph's natural width at output resolution
+widths = [0] * 128
 for code in range(ASCII_FIRST, ASCII_LAST + 1):
-    w = max(1, round(math.ceil(font.getlength(chr(code))) / SUPERSAMPLE))
-    if w > cell_w:
-        cell_w = w
+    widths[code] = max(1, round(math.ceil(font.getlength(chr(code))) / SUPERSAMPLE))
 
-# --- write header ---
 out = sys.stdout.buffer
-out.write(struct.pack('<II', cell_w, CELL_H))
 
-# --- write 128 glyph slots ---
-blank = bytes(cell_w * CELL_H)
+# Header: cell_h, then 128 x uint16 advance widths
+out.write(struct.pack('<I', CELL_H))
+for w in widths:
+    out.write(struct.pack('<H', w))
 
+# Glyph data: only slots with advance_w > 0, packed sequentially
 for code in range(128):
-    if ASCII_FIRST <= code <= ASCII_LAST:
-        pixels = render_glyph_alpha(chr(code), cell_w, CELL_H)
+    if widths[code] > 0:
+        pixels = render_glyph(chr(code), widths[code])
         out.write(bytes(pixels))
-    else:
-        out.write(blank)

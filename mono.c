@@ -1,18 +1,14 @@
 /*
- * mono.c — Minimal framebuffer renderer, monospace grid
+ * mono.c — framebuffer renderer, monospace grid, proportional .font file
  *
  * Usage:  ./mono <font.font>
  *
- * The .font file is produced by font_to_bin.py:
- *   python3 font_to_bin.py Roboto.ttf 12 > Roboto.font
+ * Reads a .font file produced by font_to_bin.py.  At load time each glyph
+ * is padded to cell_w (the widest glyph) and composited against a random
+ * fg colour + fixed bg.  Every atlas entry is then identical in size, so
+ * the render loop is COLS×ROWS×cell_h memcpy calls with no branching.
  *
- * At startup the font is loaded, each glyph composited against a random
- * foreground colour and the fixed background, and stored in a flat atlas.
- * The main loop is nothing but COLS×ROWS memcpy calls — one per cell per
- * frame.  No branching, no arithmetic, no back-buffer, no full-screen clear.
- *
- * Build:
- *   gcc -O3 -o mono mono.c
+ * Build:  gcc -O3 -o mono mono.c
  */
 
 #include <fcntl.h>
@@ -26,36 +22,16 @@
 #include <time.h>
 #include <unistd.h>
 
-/* -------------------------------------------------------------------------
- * Display geometry / background colour
- * ---------------------------------------------------------------------- */
-
 #define WIN_W  800
 #define WIN_H  480
-
 #define BG_R   10
 #define BG_G   15
 #define BG_B   40
 
-/* -------------------------------------------------------------------------
- * Pixel type — packed 32-bit XRGB (0xFFRRGGBB)
- * ---------------------------------------------------------------------- */
-
 typedef uint32_t pixel_t;
 
-/* -------------------------------------------------------------------------
- * Font / atlas
- *
- * cell_w, cell_h: dimensions of every glyph cell (same for all 128 slots)
- * atlas[c]:       pointer into a flat buffer; CELL_W×CELL_H fully-opaque
- *                 pixels, pre-composited fg+bg — ready to memcpy directly
- *                 into the framebuffer row by row.
- * ---------------------------------------------------------------------- */
-
-static int      cell_w, cell_h;
-static int      cols,   rows;        /* cells that fit in WIN_W × WIN_H  */
-static pixel_t *atlas[128];          /* one pre-composited bitmap per slot */
-static pixel_t *atlas_buf = NULL;    /* backing allocation for all bitmaps */
+static const pixel_t BG_PX = 0xFF000000u
+    | ((uint32_t)BG_R << 16) | ((uint32_t)BG_G << 8) | BG_B;
 
 static const pixel_t palette[] = {
     0xFFE63946, 0xFFF4A261, 0xFF2A9D8F, 0xFFE9C46A,
@@ -64,61 +40,70 @@ static const pixel_t palette[] = {
 #define PALETTE_LEN ((int)(sizeof palette / sizeof *palette))
 static pixel_t random_color(void) { return palette[rand() % PALETTE_LEN]; }
 
-/*
- * load_font — read the binary .font file, composite each alpha mask against
- * a random foreground colour, store the result in atlas[].
- *
- * The compositing formula is the standard "over" with a constant background:
- *   out = fg * a/255 + bg * (1 - a/255)
- * Done once here; never repeated in the render loop.
- */
+/* -------------------------------------------------------------------------
+ * Atlas — all entries padded to cell_w, composited, ready for direct memcpy
+ * ---------------------------------------------------------------------- */
+
+static int      cell_w, cell_h, cols, rows;
+static pixel_t *atlas[128];
+static pixel_t *atlas_buf;
+
 static int load_font(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (!f) { perror(path); return -1; }
 
-    uint32_t hdr[2];
-    if (fread(hdr, sizeof hdr, 1, f) != 1) { perror("fread header"); fclose(f); return -1; }
-    cell_w = (int)hdr[0];
-    cell_h = (int)hdr[1];
-    cols   = WIN_W / cell_w;
-    rows   = WIN_H / cell_h;
+    /* Header: cell_h (uint32), then 128 x advance_w (uint16) */
+    uint32_t ch;
+    if (fread(&ch, 4, 1, f) != 1) { perror("header"); return -1; }
+    cell_h = (int)ch;
 
-    int cells    = cell_w * cell_h;
-    uint8_t *mask = malloc((size_t)cells);
-    if (!mask) { perror("malloc mask"); fclose(f); return -1; }
+    uint16_t aw[128];
+    if (fread(aw, 2, 128, f) != 128) { perror("widths"); return -1; }
 
-    /* Single allocation for all 128 composited bitmaps */
+    /* cell_w = widest glyph */
+    cell_w = 1;
+    for (int i = 0; i < 128; i++)
+        if (aw[i] > cell_w) cell_w = aw[i];
+
+    cols = WIN_W / cell_w;
+    rows = WIN_H / cell_h;
+
+    int cells = cell_w * cell_h;
     atlas_buf = malloc(128 * (size_t)cells * sizeof(pixel_t));
-    if (!atlas_buf) { perror("malloc atlas"); free(mask); fclose(f); return -1; }
+    if (!atlas_buf) { perror("malloc"); return -1; }
 
-    const pixel_t bg_px = 0xFF000000u
-                        | ((uint32_t)BG_R << 16)
-                        | ((uint32_t)BG_G <<  8)
-                        | BG_B;
+    uint8_t *mask = malloc((size_t)cell_w * cell_h);  /* temp, max glyph size */
+    if (!mask) { perror("malloc mask"); return -1; }
 
     for (int code = 0; code < 128; code++) {
         atlas[code] = atlas_buf + code * cells;
 
-        if (fread(mask, 1, (size_t)cells, f) != (size_t)cells) {
-            perror("fread glyph"); free(mask); fclose(f); return -1;
+        int gw = aw[code];   /* this glyph's natural width; 0 = unused slot */
+
+        /* read the glyph's natural-width mask if it has one */
+        if (gw > 0) {
+            if (fread(mask, 1, (size_t)gw * cell_h, f) != (size_t)gw * cell_h) {
+                perror("glyph data"); free(mask); return -1;
+            }
         }
 
-        pixel_t color = (code >= 32 && code <= 126) ? random_color() : bg_px;
+        pixel_t color = (code >= 32 && code <= 126) ? random_color() : BG_PX;
         uint8_t fg_r  = (color >> 16) & 0xFF;
         uint8_t fg_g  = (color >>  8) & 0xFF;
         uint8_t fg_b  =  color        & 0xFF;
 
-        for (int i = 0; i < cells; i++) {
-            uint32_t a   = mask[i];
-            uint32_t inv = 255 - a;
-            uint8_t  r   = (uint8_t)((fg_r * a + BG_R * inv) / 255);
-            uint8_t  g   = (uint8_t)((fg_g * a + BG_G * inv) / 255);
-            uint8_t  b   = (uint8_t)((fg_b * a + BG_B * inv) / 255);
-            atlas[code][i] = 0xFF000000u
-                           | ((uint32_t)r << 16)
-                           | ((uint32_t)g <<  8)
-                           | b;
+        for (int row = 0; row < cell_h; row++) {
+            for (int col = 0; col < cell_w; col++) {
+                /* alpha from mask for glyph columns, 0 (bg) for padding */
+                uint32_t a = (gw > 0 && col < gw) ? mask[row * gw + col] : 0;
+                uint32_t inv = 255 - a;
+                uint8_t r = (uint8_t)((fg_r * a + BG_R * inv) / 255);
+                uint8_t g = (uint8_t)((fg_g * a + BG_G * inv) / 255);
+                uint8_t b = (uint8_t)((fg_b * a + BG_B * inv) / 255);
+                atlas[code][row * cell_w + col] = 0xFF000000u
+                    | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+            }
         }
     }
 
@@ -131,23 +116,16 @@ static int load_font(const char *path)
  * Framebuffer
  * ---------------------------------------------------------------------- */
 
-typedef struct {
-    int      fd;
-    pixel_t *mem;
-    size_t   size;
-    int      stride;   /* pixels per scanline */
-} framebuf;
+typedef struct { int fd; pixel_t *mem; size_t size; int stride; } framebuf;
 
 static int fb_open(framebuf *fb, const char *path)
 {
     struct fb_var_screeninfo vinfo;
     struct fb_fix_screeninfo finfo;
-
     fb->fd = open(path, O_RDWR);
     if (fb->fd < 0) { perror("open"); return -1; }
-    if (ioctl(fb->fd, FBIOGET_VSCREENINFO, &vinfo) < 0) { perror("VSCREENINFO"); return -1; }
-    if (ioctl(fb->fd, FBIOGET_FSCREENINFO, &finfo) < 0) { perror("FSCREENINFO"); return -1; }
-
+    if (ioctl(fb->fd, FBIOGET_VSCREENINFO, &vinfo) < 0) { perror("vscreeninfo"); return -1; }
+    if (ioctl(fb->fd, FBIOGET_FSCREENINFO, &finfo) < 0) { perror("fscreeninfo"); return -1; }
     fb->stride = (int)(finfo.line_length / (vinfo.bits_per_pixel / 8));
     fb->size   = finfo.smem_len;
     fb->mem    = mmap(NULL, fb->size, PROT_READ | PROT_WRITE, MAP_SHARED, fb->fd, 0);
@@ -162,11 +140,7 @@ static void fb_close(framebuf *fb)
 }
 
 /* -------------------------------------------------------------------------
- * Render loop
- *
- * For each cell: pick a random glyph, copy its rows directly into the
- * framebuffer.  That's it.  No clear, no back-buffer, no blending.
- * Each memcpy is cell_w*4 bytes — small enough to stay in L1 cache.
+ * Render loop — no branching, no arithmetic, just memcpy
  * ---------------------------------------------------------------------- */
 
 static void render_frame(framebuf *fb)
@@ -177,7 +151,6 @@ static void render_frame(framebuf *fb)
             const pixel_t *src = atlas[code];
             int dx = ix * cell_w;
             int dy = iy * cell_h;
-
             for (int gy = 0; gy < cell_h; gy++) {
                 pixel_t *dst = fb->mem + (dy + gy) * fb->stride + dx;
                 memcpy(dst, src + gy * cell_w, (size_t)cell_w * sizeof(pixel_t));
@@ -186,29 +159,14 @@ static void render_frame(framebuf *fb)
     }
 }
 
-/* -------------------------------------------------------------------------
- * Main
- * ---------------------------------------------------------------------- */
-
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <font.font>\n", argv[0]);
-        return 1;
-    }
-
+    if (argc != 2) { fprintf(stderr, "Usage: %s <font.font>\n", argv[0]); return 1; }
     srand((unsigned)time(NULL));
-
     if (load_font(argv[1]) < 0) return 1;
-
     framebuf fb;
     if (fb_open(&fb, "/dev/fb0") < 0) return 1;
-
-    while (1) {
-        render_frame(&fb);
-        usleep(33333);
-    }
-
+    while (1) { render_frame(&fb); usleep(33333); }
     fb_close(&fb);
     free(atlas_buf);
     return 0;

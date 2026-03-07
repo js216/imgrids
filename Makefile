@@ -1,16 +1,16 @@
-FONT_SIZE = 36
-CFLAGS = -O2 -DFONT_SIZE=$(FONT_SIZE)
-LDLIBS = -lm
+FONT_SIZE ?= 16
+CFLAGS = -O3 -DFONT_SIZE=${FONT_SIZE}
+PROGS = shapes chars tt mono
 
-all: mono tt shapes chars
-tt: Roboto.h
+all: $(PROGS)
+tt: Roboto-Regular.font
 mono: RobotoMono-Regular.font
-
-%: %.c Makefile
-	$(CC) $(CFLAGS) $< -o $@ $(LDLIBS)
-
-%.h: %.ttf Makefile
-	python3 font_to_c.py $< $(FONT_SIZE) > $@
 
 %.font: %.ttf Makefile
 	python3 font_to_bin.py $< $(FONT_SIZE) > $@
+
+%: %.c Makefile
+	$(CC) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f $(PROGS) *.font
