@@ -1,0 +1,22 @@
+[package]
+name    = "imgrids"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "imgrids"
+
+[build-dependencies]
+cc = "1"
+
+[dependencies]
+libc = "0.2"
+
+[[example]]
+name = "demo"
+
+[profile.release]
+opt-level = 3
+lto = "fat"          # Link Time Optimization (huge for FFI/Library speed)
+codegen-units = 1    # Maximizes optimization potential
+panic = "abort"      # Removes stack unwinding overhead

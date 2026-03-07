@@ -1,12 +1,19 @@
 # Towards a fast, immediate-mode grid-layout software-rendered GUI
 
+This repository explores how fast a simple GUI can be rendered directly to the
+framebuffer on hardware without GPU acceleration. I have tried to make it using
+the [LVGL](https://github.com/lvgl/lvgl) and
+[ImGUI](https://github.com/ocornut/imgui) libraries: it works and looks
+beautiful, but consumes 50%+ of the single-core CPU time.
+
 This repository contains a small sequence of programs to answer the question,
 just how fast can one render a simple, mostly text-based GUI, direct to the
-framebuffer?
+framebuffer? We proceed as follows:
 
 - ex1: Draw a random sequence of symbols to fill the whole screen
 - ex2: Write the symbols to a particular location on the screen
 - ex3: Automatic grid layout, quasi domain-specific language
+- ex4: Rewrite in Rust (of course ...)
 
 ### Example 1: Writing text to a framebuffer
 
@@ -29,7 +36,7 @@ The maximum CPU usage (Pentium N3540 @ 2.16GHz) depends on the font size:
 
 ### Example 2: Writing text to a particular location
 
-We now rewrite the renderers from the previuos example to write to a particular
+We now rewrite the renderers from the previous example to write to a particular
 location on the screen. This is a two step process: first, a `_init()` function
 creates the "font atlas", and then, in the main loop, the `_draw()` function
 draws the text wherever we want it to.
@@ -41,7 +48,7 @@ draws the text wherever we want it to.
 | `mono`   | `mono_init(const char *path, pixel_t fg, pixel_t bg)`          | `mono_draw()`   |
 | `tt`     | `tt_init(const char *path, pixel_t fg, pixel_t bg)`            | `tt_draw()`     |
 
-The `_draw` functions all the the same call signature:
+The `_draw` functions all use the same call signature:
 
 ```
 void _draw(atlas, pixel_t *fb, int fb_stride, int x, int y, const char *text);
@@ -53,7 +60,7 @@ The arguments are as follows:
 - `fb`        : pointer to pixel (0,0) of the framebuffer
 - `fb_stride` : pixels per scanline (may exceed visible width)
 - `x`, `y`    : top-left pixel of the first glyph
-- `text`      : NUL-terminated ASCII string to render
+- `text`      : NULL-terminated ASCII string to render
 
 For `_init` functions, arguments are as follows:
 
@@ -121,6 +128,17 @@ in cost to what you would have written by hand.
 labels therefore cost one comparison per frame rather than a full redraw, which
 roughly halves CPU usage when most of the screen is static text.
 
-### Author
+### Example 4: Rewrite in Rust
 
-Jakob Kastelic
+The move to Rust takes the "zero-overhead" goal further by using the type system
+to handle memory safety without needing a garbage collector. The C-style macros
+are replaced with a Tree DSL that uses closures to generate text. This keeps the
+code safe to run across threads while remaining as fast as the original
+flat-array logic. Only a single external crate is used: `libc` talks to the
+Linux kernel directly to handle ioctl and mmap calls for the framebuffer device.
+
+### Authors
+
+Concept: Jakob Kastelic
+
+All the code: Claude Sonnet 4.6 and Gemini 3.

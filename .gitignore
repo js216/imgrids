@@ -1,15 +1,16 @@
-*
+# temp files
+*.swp
+*.zip
+*.o
+*.font
 
-!Makefile
-!README
-!LICENSE
-!.gitignore
+# directories
+*/target
+fonts
 
-!*.c
-!*.h
-!*.ttf
-!*.py
-!*.png
-!*.md
-
-!ex*
+# executables
+demo
+chars
+mono
+shapes
+tt
