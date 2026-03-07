@@ -18,7 +18,15 @@ The maximum CPU usage depends on the font size:
 | mono       |    11.0% |     8.0% |     6.0% |     6.0% |
 | tt         |    13.0% |     9.0% |     6.0% |     7.0% |
 
-![](screenshot.png)
+### Screenshots
+
+![](shapes.png)
+
+![](chars.png)
+
+![](mono.png)
+
+![](tt.png)
 
 ### Author
 
