@@ -114,12 +114,13 @@ fn main() {
         WIN_H - 2 * MARGIN_Y,
     );
 
+    backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
+
     loop {
         if backend.poll_quit() {
             break;
         }
 
-        backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
         backend.render(&mut |pixels, stride| {
             for c in &mut cells {
                 c.draw(pixels, stride);

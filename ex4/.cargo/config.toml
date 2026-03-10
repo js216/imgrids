@@ -3,9 +3,7 @@ linker = "arm-linux-gnueabihf-gcc"
 rustflags = ["-C", "target-feature=+crt-static"]
 
 [target.wasm32-unknown-emscripten]
-rustflags = [
-    "-C", "link-args=-sUSE_SDL=2 -sSINGLE_FILE -sASYNCIFY -sALLOW_MEMORY_GROWTH=1 -fno-exceptions --embed-file fonts",
-]
+rustflags = [ "-C", "link-args=-sUSE_SDL=2 -sSINGLE_FILE -sASYNCIFY -sALLOW_MEMORY_GROWTH=1 --embed-file fonts"]
 
 [alias]
 build-sdl  = "build --release --example demo --features sdl,bpp16"
