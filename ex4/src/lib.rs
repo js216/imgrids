@@ -1,5 +1,5 @@
-pub mod fonts;
 pub mod backends;
+pub mod fonts;
 pub mod layout;
 pub mod renderer;
 pub mod renderers;

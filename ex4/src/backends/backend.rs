@@ -27,14 +27,19 @@ pub trait Backend {
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel);
 
     /// Draw a hollow border rectangle of `thickness` pixels.
-    fn draw_border(&mut self,
-        x: usize, y: usize, w: usize, h: usize,
-        thickness: usize, color: Pixel,
+    fn draw_border(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        thickness: usize,
+        color: Pixel,
     ) {
-        self.fill_rect(x,                 y,                 w,         thickness, color);
-        self.fill_rect(x,                 y + h - thickness, w,         thickness, color);
-        self.fill_rect(x,                 y,                 thickness, h,         color);
-        self.fill_rect(x + w - thickness, y,                 thickness, h,         color);
+        self.fill_rect(x, y, w, thickness, color);
+        self.fill_rect(x, y + h - thickness, w, thickness, color);
+        self.fill_rect(x, y, thickness, h, color);
+        self.fill_rect(x + w - thickness, y, thickness, h, color);
     }
 
     /// Lock the pixel buffer, invoke `draw_fn`, then present.

@@ -1,8 +1,8 @@
-use crate::Pixel;
 use crate::backends::Backend;
+use crate::Pixel;
+use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
-use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 
 pub struct Sdl2Backend<'a> {
@@ -36,8 +36,12 @@ impl<'a> Sdl2Backend<'a> {
 }
 
 impl<'a> Backend for Sdl2Backend<'a> {
-    fn width(&self)  -> usize { self.width }
-    fn height(&self) -> usize { self.height }
+    fn width(&self) -> usize {
+        self.width
+    }
+    fn height(&self) -> usize {
+        self.height
+    }
 
     fn clear(&mut self, color: Pixel) {
         self.render(&mut |pixels, _stride| pixels.fill(color));
@@ -53,18 +57,22 @@ impl<'a> Backend for Sdl2Backend<'a> {
     }
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        self.texture.with_lock(None, |buffer: &mut [u8], stride: usize| {
-            let pixel_stride = stride / 2; // RGB565 is 2 bytes per pixel
-            let pixels = unsafe {
-                std::slice::from_raw_parts_mut(
-                    buffer.as_mut_ptr() as *mut Pixel,
-                    buffer.len() / 2,
-                )
-            };
-            draw_fn(pixels, pixel_stride);
-        }).expect("texture lock failed");
+        self.texture
+            .with_lock(None, |buffer: &mut [u8], stride: usize| {
+                let pixel_stride = stride / 2; // RGB565 is 2 bytes per pixel
+                let pixels = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        buffer.as_mut_ptr() as *mut Pixel,
+                        buffer.len() / 2,
+                    )
+                };
+                draw_fn(pixels, pixel_stride);
+            })
+            .expect("texture lock failed");
 
-        self.canvas.copy(&self.texture, None, None).expect("canvas copy failed");
+        self.canvas
+            .copy(&self.texture, None, None)
+            .expect("canvas copy failed");
         self.canvas.present();
     }
 }
