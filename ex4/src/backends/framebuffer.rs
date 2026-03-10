@@ -1,4 +1,5 @@
 use crate::Pixel;
+use crate::backends::Backend;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
@@ -112,27 +113,26 @@ impl Framebuf {
             mmap_size,
         })
     }
+}
+
+impl Backend for Framebuf {
+    fn width(&self)  -> usize { self.width }
+    fn height(&self) -> usize { self.height }
 
     #[inline]
-    pub fn clear(&mut self, color: Pixel) {
+    fn clear(&mut self, color: Pixel) {
         self.pixels.fill(color);
     }
 
-    pub fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
+    fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
         for row in y..y + h {
             let start = row * self.stride + x;
             self.pixels[start..start + w].fill(color);
         }
     }
 
-    pub fn draw_border(&mut self,
-        x: usize, y: usize, w: usize, h: usize,
-        thickness: usize, color: Pixel,
-    ) {
-        self.fill_rect(x,                 y,                 w,         thickness, color);
-        self.fill_rect(x,                 y + h - thickness, w,         thickness, color);
-        self.fill_rect(x,                 y,                 thickness, h,         color);
-        self.fill_rect(x + w - thickness, y,                 thickness, h,         color);
+    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
+        draw_fn(self.pixels, self.stride);
     }
 }
 

@@ -1,15 +1,16 @@
-// imgrids/src/lib.rs
-//
-// Public re-exports so consumers only need `use imgrids::*`.
-
 pub mod fonts;
-pub mod framebuf;
+pub mod backends;
 pub mod layout;
 pub mod renderer;
 pub mod renderers;
 
 pub type Pixel = u16;
 
-pub use framebuf::Framebuf;
 pub use layout::{resolve, Cell, Node};
 pub use renderer::Renderer;
+
+#[cfg(feature = "fb0")]
+pub use crate::backends::framebuffer::Framebuf;
+
+#[cfg(feature = "sdl")]
+pub use crate::backends::sdl2::Sdl2Backend;
