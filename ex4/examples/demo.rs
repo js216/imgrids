@@ -9,7 +9,7 @@
 //   sudo ./target/release/examples/demo
 
 use imgrids::{
-    color::*,
+    Pixel,
     framebuf::Framebuf,
     layout::{cell, col, resolve, row},
     renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
@@ -18,6 +18,16 @@ use imgrids::{
 use imgrids::renderers::font8x8::FONT as FONT_8X8;
 use imgrids::renderers::font_terminus_8x16::FONT as FONT_TER;
 use imgrids::renderers::font_vga16::FONT as FONT_VGA;
+
+const WHITE:    Pixel = 0xFFFF;
+const BLACK:    Pixel = 0x0000;
+const RED:      Pixel = 0xF800;
+const GREEN:    Pixel = 0x07E0;
+const BLUE:     Pixel = 0x001F;
+const ROSE:     Pixel = 0xFCB6;
+const MINT:     Pixel = 0x97F6;
+const SKY:      Pixel = 0x9E3F;
+const LAVENDER: Pixel = 0xCCBF;
 
 // ─── Geometry ────────────────────────────────────────────────────────────────
 
@@ -90,16 +100,16 @@ fn main() {
     // To swap a renderer: change the type on the left and the constructor
     // call on the right — the layout below is unaffected.
 
-    let ch1 = CharsAtlas::new(&FONT_VGA, 16,  32, WHITE, BLACK);
-    let ch2 = CharsAtlas::new(&FONT_VGA, 32, 64, WHITE, BLACK);
-    let ch3 = CharsAtlas::new(&FONT_TER, 16, 32, WHITE, BLACK);
-    let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, WHITE, BLACK);
-    let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
-    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
+    let ch1 = CharsAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
+    let ch2 = CharsAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
+    let ch3 = CharsAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
+    let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
+    let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, MINT, BLACK);
+    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, SKY, BLACK);
     let roboto = MonoFont::load("RobotoMono-Regular.ttf").expect("load RobotoMono-Regular.ttf");
     let myriad = TtFont::load("MyriadPro-Regular.ttf").expect("load MyriadPro-Regular.ttf");
-    let ch7 = roboto.at(32, WHITE, BLACK);
-    let ch8 = myriad.at(32, WHITE, BLACK);
+    let ch7 = roboto.at(32, ROSE, BLACK);
+    let ch8 = myriad.at(32, LAVENDER, BLACK);
 
     // ── Layout ───────────────────────────────────────────────────────────────
     //
