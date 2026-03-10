@@ -100,19 +100,34 @@ fn main() {
     // Layout
     let layout = row(
         1,
-        vec![col(
-            1,
-            vec![
-                cell(ch1.as_renderer(), gen_hello),
-                cell(ch2.as_renderer(), gen_world),
-                cell(ch3.as_renderer(), gen_random),
-                cell(ch4.as_renderer(), gen_random),
-                cell(ch5.as_renderer(), gen_hello),
-                cell(ch6.as_renderer(), gen_world),
-                cell(ch7.as_renderer(), gen_random),
-                cell(ch8.as_renderer(), gen_random),
-            ],
-        )],
+        vec![
+            col(
+                1,
+                vec![
+                    cell(ch1.as_renderer(), gen_hello),
+                    cell(ch2.as_renderer(), gen_world),
+                    cell(ch3.as_renderer(), gen_random),
+                    cell(ch4.as_renderer(), gen_random),
+                    cell(ch5.as_renderer(), gen_hello),
+                    cell(ch6.as_renderer(), gen_world),
+                    cell(ch7.as_renderer(), gen_random),
+                    cell(ch8.as_renderer(), gen_random),
+                ],
+            ),
+            col(
+                1,
+                vec![
+                    cell(ch1.as_renderer(), gen_hello),
+                    cell(ch2.as_renderer(), gen_world),
+                    cell(ch3.as_renderer(), gen_random),
+                    cell(ch4.as_renderer(), gen_random),
+                    cell(ch5.as_renderer(), gen_hello),
+                    cell(ch6.as_renderer(), gen_world),
+                    cell(ch7.as_renderer(), gen_random),
+                    cell(ch8.as_renderer(), gen_random),
+                ],
+            ),
+        ],
     );
 
     let mut cells = resolve(
