@@ -1,42 +1,56 @@
-// Bitmap font renderer — scales the embedded 8×8 public-domain font to any
-// cell size using nearest-neighbour sampling, baking fg/bg at init time.
+// Bitmap font renderer — scales any embedded font to any cell size using
+// nearest-neighbour sampling, baking fg/bg at init time.
 // Mirrors chars.c.
 
 use crate::{Pixel, Renderer};
 
-// The 8×8 font data, embedded at compile time.
-// Each entry is 8 bytes; bit N of byte Y is the pixel at column N, row Y.
-include!("font8x8.rs");
+/// Describes a compiled-in bitmap font.
+///
+/// Font files expose a `pub static` of this type; callers pass a reference
+/// to `CharsAtlas::new` to select the font at atlas-creation time.
+pub struct BitmapFont {
+    pub font_w:  usize,
+    pub font_h:  usize,
+    pub glyphs:  usize,
+    /// Row bytes laid out as [glyph][row], flattened: length = glyphs * font_h.
+    pub bitmap:  &'static [u8],
+}
 
-const FONT_W: usize = 8;
-const FONT_H: usize = 8;
-const NUM_GLYPHS: usize = 128;
+impl BitmapFont {
+    #[inline]
+    fn row(&self, glyph: usize, row: usize) -> u8 {
+        self.bitmap[(glyph % self.glyphs) * self.font_h + row]
+    }
+}
 
 pub struct CharsAtlas {
     glyph_w: usize,
     glyph_h: usize,
-    /// Flat: [NUM_GLYPHS][glyph_h * glyph_w]
-    glyphs: Vec<Pixel>,
+    font:    &'static BitmapFont,
+    /// Flat: [font.glyphs][glyph_h * glyph_w]
+    glyphs:  Vec<Pixel>,
 }
 
 impl CharsAtlas {
-    pub fn new(glyph_w: usize, glyph_h: usize, fg: Pixel, bg: Pixel) -> Self {
+    pub fn new(
+        font:    &'static BitmapFont,
+        glyph_w: usize,
+        glyph_h: usize,
+        fg:      Pixel,
+        bg:      Pixel,
+    ) -> Self {
         let n = glyph_h * glyph_w;
-        let mut glyphs = vec![bg; NUM_GLYPHS * n];
-        for i in 0..NUM_GLYPHS {
-            rasterise(&mut glyphs[i * n..(i + 1) * n], glyph_w, glyph_h, i, fg, bg);
+        let mut glyphs = vec![bg; font.glyphs * n];
+        for i in 0..font.glyphs {
+            rasterise(&mut glyphs[i * n..(i + 1) * n], glyph_w, glyph_h, font, i, fg, bg);
         }
-        CharsAtlas {
-            glyph_w,
-            glyph_h,
-            glyphs,
-        }
+        CharsAtlas { glyph_w, glyph_h, font, glyphs }
     }
 
     #[inline]
     fn glyph(&self, code: usize) -> &[Pixel] {
         let n = self.glyph_h * self.glyph_w;
-        let i = code & 0x7F;
+        let i = code % self.font.glyphs;
         &self.glyphs[i * n..i * n + n]
     }
 }
@@ -55,21 +69,25 @@ impl Renderer for CharsAtlas {
         }
     }
 
-    fn cell_height(&self) -> usize {
-        self.glyph_h
-    }
-    fn char_width(&self, _: char) -> usize {
-        self.glyph_w
-    }
+    fn cell_height(&self) -> usize { self.glyph_h }
+    fn char_width(&self, _: char) -> usize { self.glyph_w }
 }
 
-fn rasterise(dst: &mut [Pixel], gw: usize, gh: usize, ascii: usize, fg: Pixel, bg: Pixel) {
-    let rows = &FONT8X8[ascii & 0x7F];
+fn rasterise(
+    dst:   &mut [Pixel],
+    gw:    usize,
+    gh:    usize,
+    font:  &BitmapFont,
+    ascii: usize,
+    fg:    Pixel,
+    bg:    Pixel,
+) {
     for dy in 0..gh {
-        let sy = (dy * FONT_H) / gh;
+        let sy = (dy * font.font_h) / gh;
+        let row = font.row(ascii, sy);
         for dx in 0..gw {
-            let sx = (dx * FONT_W) / gw;
-            let lit = (rows[sy] >> sx) & 1 == 1;
+            let sx = (dx * font.font_w) / gw;
+            let lit = (row >> sx) & 1 == 1;
             dst[dy * gw + dx] = if lit { fg } else { bg };
         }
     }

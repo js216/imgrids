@@ -15,6 +15,10 @@ use imgrids::{
     renderers::{CharsAtlas, MonoAtlas, ShapesAtlas, TtAtlas},
 };
 
+use imgrids::renderers::font8x8::FONT as FONT_8X8;
+use imgrids::renderers::font_terminus_8x16::FONT as FONT_TER;
+use imgrids::renderers::font_vga16::FONT as FONT_VGA;
+
 // ─── Geometry ────────────────────────────────────────────────────────────────
 
 const WIN_X: usize = 0;
@@ -86,70 +90,32 @@ fn main() {
     // To swap a renderer: change the type on the left and the constructor
     // call on the right — the layout below is unaffected.
 
-    let l_shapes = ShapesAtlas::new(24, RED, TEAL);
-    let l_chars = CharsAtlas::new(24, 24, GREEN, BROWN);
-    let l_mono =
-        MonoAtlas::load("../ex2/RobotoMono-Regular-24.font", PURPLE, OLIVE).expect("l_mono");
-    let l_tt = TtAtlas::load("../ex2/Roboto-Regular-24.font", BLUE, SLATE).expect("l_tt");
-
-    let r_shapes = ShapesAtlas::new(24, VIOLET, TEAL);
-    let r_chars = CharsAtlas::new(24, 24, PINK, BROWN);
-    let r_mono =
-        MonoAtlas::load("../ex2/RobotoMono-Regular-12.font", WHITE, OLIVE).expect("r_mono");
-    let r_tt = TtAtlas::load("../ex2/Roboto-Regular-12.font", GRAY, SLATE).expect("r_tt");
+    let ch1 = CharsAtlas::new(&FONT_VGA, 8,  32, WHITE, BLACK);
+    let ch2 = CharsAtlas::new(&FONT_VGA, 16, 64, WHITE, BLACK);
+    let ch3 = CharsAtlas::new(&FONT_TER, 8,  32, WHITE, BLACK);
+    let ch4 = CharsAtlas::new(&FONT_TER, 16, 64, WHITE, BLACK);
+    let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
+    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
+    let ch7 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
+    let ch8 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
 
     // ── Layout ───────────────────────────────────────────────────────────────
     //
     // Mirrors the C macro tree exactly.  The Renderer references are tied to
     // the atlas lifetimes above — the borrow checker enforces this.
 
-    let layout = col(
-        1,
-        vec![
-            row(
-                1,
-                vec![
-                    cell(r_tt.as_renderer(), gen_hello),
-                    cell(r_tt.as_renderer(), gen_world),
-                    cell(r_tt.as_renderer(), gen_random),
-                    cell(r_tt.as_renderer(), gen_random),
-                    cell(r_tt.as_renderer(), gen_random),
-                ],
-            ),
-            row(
-                10,
-                vec![
-                    col(
-                        1,
-                        vec![
-                            cell(l_shapes.as_renderer(), gen_hello),
-                            cell(l_chars.as_renderer(), gen_hello),
-                            cell(l_mono.as_renderer(), gen_hello),
-                            cell(l_tt.as_renderer(), gen_hello),
-                        ],
-                    ),
-                    col(
-                        1,
-                        vec![
-                            cell(l_shapes.as_renderer(), gen_random),
-                            cell(l_chars.as_renderer(), gen_random),
-                            cell(l_mono.as_renderer(), gen_random),
-                            cell(l_tt.as_renderer(), gen_random),
-                        ],
-                    ),
-                    col(
-                        1,
-                        vec![
-                            cell(r_shapes.as_renderer(), gen_world),
-                            cell(r_chars.as_renderer(), gen_world),
-                            cell(r_mono.as_renderer(), gen_world),
-                            cell(r_tt.as_renderer(), gen_random),
-                        ],
-                    ),
-                ],
-            ),
-        ],
-    );
+    let layout = row(1, vec![
+        col(1, vec![
+            cell(ch1.as_renderer(), gen_hello),
+            cell(ch2.as_renderer(), gen_world),
+            cell(ch3.as_renderer(), gen_random),
+            cell(ch4.as_renderer(), gen_random),
+            cell(ch5.as_renderer(), gen_hello),
+            cell(ch6.as_renderer(), gen_world),
+            cell(ch7.as_renderer(), gen_random),
+            cell(ch8.as_renderer(), gen_random),
+        ]),
+    ]);
 
     // ── Resolve layout once ───────────────────────────────────────────────
     //
