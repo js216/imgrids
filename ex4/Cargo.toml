@@ -12,7 +12,6 @@ ab_glyph = "0.2"
 sdl2 = { version = "0.35", optional = true }
 
 [features]
-default = ["fb0"]
 fb0 = []
 sdl = ["dep:sdl2"]
 

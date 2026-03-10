@@ -21,9 +21,6 @@ const LAVENDER: Pixel = 0xCCBF;
 
 // ─── Geometry ────────────────────────────────────────────────────────────────
 
-const SCREEN_W: usize = 800;
-const SCREEN_H: usize = 480;
-
 const WIN_X:    usize = 40;
 const WIN_Y:    usize = 40;
 const WIN_W:    usize = 720;
@@ -64,8 +61,8 @@ fn main() {
     let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
     let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, MINT, BLACK);
     let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, SKY, BLACK);
-    let roboto = MonoFont::load("RobotoMono-Regular.ttf").expect("font");
-    let myriad = TtFont::load("MyriadPro-Regular.ttf").expect("font");
+    let roboto = MonoFont::load("fonts/RobotoMono-Regular.ttf").expect("font");
+    let myriad = TtFont::load("fonts/MyriadPro-Regular.ttf").expect("font");
     let ch7 = roboto.at(32, ROSE, BLACK);
     let ch8 = myriad.at(32, LAVENDER, BLACK);
 
