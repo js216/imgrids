@@ -6,11 +6,9 @@ edition = "2021"
 [lib]
 name = "imgrids"
 
-[build-dependencies]
-cc = "1"
-
 [dependencies]
 libc = "0.2"
+ab_glyph = "0.2"
 
 [[example]]
 name = "demo"

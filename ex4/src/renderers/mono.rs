@@ -1,94 +1,86 @@
-// Monospace font renderer — loads a .font file produced by font_to_bin.py,
-// pads all glyphs to the widest advance width, composites fg/bg at load time.
-// Mirrors mono.c.
-
 use crate::{Pixel, Renderer};
-use std::fs;
+use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
 
 pub struct MonoAtlas {
     cell_w: usize,
     cell_h: usize,
-    /// Flat: [128][cell_w * cell_h], already composited
     glyphs: Vec<Pixel>,
 }
 
 impl MonoAtlas {
-    pub fn load(path: &str, fg: Pixel, bg: Pixel) -> io::Result<Self> {
-        let data = fs::read(path)?;
-        let mut cur = 0usize;
+    pub fn from_ttf(path: &str, cell_h: usize, fg: Pixel, bg: Pixel) -> io::Result<Self> {
+        let data = std::fs::read(path)
+            .map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
+        let font = FontVec::try_from_vec(data)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
-        // Header: u32 cell_height
-        if data.len() < 4 {
-            return Err(io_err("mono: truncated header"));
-        }
-        let cell_h = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
-        cur += 4;
+        // Scale so that ascent - descent == cell_h exactly.
+        let scale = {
+            let raw = PxScale::from(cell_h as f32);
+            let sf  = font.as_scaled(raw);
+            let natural_h = sf.ascent() - sf.descent();
+            PxScale::from((cell_h as f32 / natural_h) * cell_h as f32)
+        };
+        let sf       = font.as_scaled(scale);
+        let baseline = sf.ascent();
 
-        // Advance widths: 128 × u16
-        if data.len() < cur + 128 * 2 {
-            return Err(io_err("mono: truncated widths"));
-        }
-        let mut aw = [0u16; 128];
-        for i in 0..128 {
-            aw[i] = u16::from_le_bytes(data[cur..cur + 2].try_into().unwrap());
-            cur += 2;
-        }
-
-        let cell_w = aw
-            .iter()
-            .copied()
-            .map(|v| v as usize)
+        // Pass 1: find widest advance width → cell_w.
+        let cell_w = (0u8..128)
+            .map(|c| sf.h_advance(font.glyph_id(c as char)).ceil() as usize)
             .max()
             .unwrap_or(1)
             .max(1);
+
+        // Decompose fg/bg into 8-bit RGB channels for alpha blending.
+        // RGB565: RRRRR_GGGGGG_BBBBB → expand to 8-bit with << 3 / << 2.
+        let fg_r = (((fg >> 11) & 0x1F) << 3) as u32;
+        let fg_g = (((fg >>  5) & 0x3F) << 2) as u32;
+        let fg_b = (( fg        & 0x1F) << 3) as u32;
+        let bg_r = (((bg >> 11) & 0x1F) << 3) as u32;
+        let bg_g = (((bg >>  5) & 0x3F) << 2) as u32;
+        let bg_b = (( bg        & 0x1F) << 3) as u32;
+
         let cells = cell_w * cell_h;
-
-        let fg_r = ((fg >> 16) & 0xFF) as u32;
-        let fg_g = ((fg >> 8) & 0xFF) as u32;
-        let fg_b = (fg & 0xFF) as u32;
-        let bg_r = ((bg >> 16) & 0xFF) as u32;
-        let bg_g = ((bg >> 8) & 0xFF) as u32;
-        let bg_b = (bg & 0xFF) as u32;
-
         let mut glyphs = vec![bg; 128 * cells];
+        let mut alpha  = vec![0u8; cells];
 
-        for code in 0..128usize {
-            let gw = aw[code] as usize;
-            let dst = &mut glyphs[code * cells..(code + 1) * cells];
+        for code in 0u8..128 {
+            let id    = font.glyph_id(code as char);
+            let lsb   = sf.h_side_bearing(id);
+            let glyph = id.with_scale_and_position(
+                scale,
+                ab_glyph::point(-lsb, baseline),
+            );
 
-            if gw > 0 {
-                let mask_len = gw * cell_h;
-                if data.len() < cur + mask_len {
-                    return Err(io_err("mono: truncated glyph"));
-                }
-                let mask = &data[cur..cur + mask_len];
-                cur += mask_len;
+            alpha.fill(0);
 
-                for row in 0..cell_h {
-                    for col in 0..cell_w {
-                        let alpha = if col < gw {
-                            mask[row * gw + col] as u32
-                        } else {
-                            0
-                        };
-                        let inv = 255 - alpha;
-                        let r = ((fg_r * alpha + bg_r * inv) / 255) as u8;
-                        let g = ((fg_g * alpha + bg_g * inv) / 255) as u8;
-                        let b = ((fg_b * alpha + bg_b * inv) / 255) as u8;
-                        dst[row * cell_w + col] =
-                            0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+            if let Some(outlined) = font.outline_glyph(glyph) {
+                let bounds = outlined.px_bounds();
+                outlined.draw(|x, y, v| {
+                    let px = bounds.min.x as i32 + x as i32;
+                    let py = bounds.min.y as i32 + y as i32;
+                    if px >= 0 && py >= 0
+                        && (px as usize) < cell_w
+                        && (py as usize) < cell_h
+                    {
+                        alpha[py as usize * cell_w + px as usize] = (v * 255.0 + 0.5) as u8;
                     }
-                }
+                });
             }
-            // else: columns stay as bg (already initialised)
+
+            let dst = &mut glyphs[code as usize * cells..(code as usize + 1) * cells];
+            for (i, &a) in alpha.iter().enumerate() {
+                let a   = a as u32;
+                let inv = 255 - a;
+                let r = ((fg_r * a + bg_r * inv) / 255) as u16;
+                let g = ((fg_g * a + bg_g * inv) / 255) as u16;
+                let b = ((fg_b * a + bg_b * inv) / 255) as u16;
+                dst[i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+            }
         }
 
-        Ok(MonoAtlas {
-            cell_w,
-            cell_h,
-            glyphs,
-        })
+        Ok(MonoAtlas { cell_w, cell_h, glyphs })
     }
 
     #[inline]
@@ -113,14 +105,6 @@ impl Renderer for MonoAtlas {
         }
     }
 
-    fn cell_height(&self) -> usize {
-        self.cell_h
-    }
-    fn char_width(&self, _: char) -> usize {
-        self.cell_w
-    }
-}
-
-fn io_err(msg: &'static str) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, msg)
+    fn cell_height(&self) -> usize { self.cell_h }
+    fn char_width(&self, _: char) -> usize { self.cell_w }
 }

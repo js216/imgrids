@@ -96,8 +96,10 @@ fn main() {
     let ch4 = CharsAtlas::new(&FONT_TER, 16, 64, WHITE, BLACK);
     let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
     let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
-    let ch7 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
-    let ch8 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
+    let ch7 = MonoAtlas::from_ttf("RobotoMono-Regular.ttf", 24, WHITE, BLACK)
+        .expect("load RobotoMono-Regular.ttf");
+    let ch8 = MonoAtlas::from_ttf("RobotoMono-Regular.ttf", 32, WHITE, BLACK)
+        .expect("load RobotoMono-Regular.ttf");
 
     // ── Layout ───────────────────────────────────────────────────────────────
     //
