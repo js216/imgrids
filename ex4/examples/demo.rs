@@ -15,9 +15,9 @@ use imgrids::{
     renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
 };
 
-use imgrids::renderers::font8x8::FONT as FONT_8X8;
-use imgrids::renderers::font_terminus_8x16::FONT as FONT_TER;
-use imgrids::renderers::font_vga16::FONT as FONT_VGA;
+use imgrids::fonts::font8x8::FONT as FONT_8X8;
+use imgrids::fonts::font_terminus_8x16::FONT as FONT_TER;
+use imgrids::fonts::font_vga16::FONT as FONT_VGA;
 
 const WHITE:    Pixel = 0xFFFF;
 const BLACK:    Pixel = 0x0000;

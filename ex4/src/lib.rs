@@ -2,6 +2,7 @@
 //
 // Public re-exports so consumers only need `use imgrids::*`.
 
+pub mod fonts;
 pub mod framebuf;
 pub mod layout;
 pub mod renderer;
