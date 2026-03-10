@@ -1,3 +1,6 @@
+mod renderer;
+pub use renderer::Renderer;
+
 pub mod chars;
 pub mod mono;
 pub mod shapes;

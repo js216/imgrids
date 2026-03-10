@@ -49,5 +49,7 @@ pub trait Backend {
 
     /// Poll for a quit signal. Returns true once when quit is requested.
     /// The default implementation always returns false (headless/fb0 backends).
-    fn poll_quit(&mut self) -> bool { false }
+    fn poll_quit(&mut self) -> bool {
+        false
+    }
 }

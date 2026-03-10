@@ -40,7 +40,6 @@ impl Sdl2Backend {
             _creator: creator,
         })
     }
-
 }
 
 impl Backend for Sdl2Backend {
@@ -103,7 +102,5 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
         .expect("window");
     let canvas = window.into_canvas().build().expect("canvas");
     let event_pump = sdl.event_pump().expect("event pump");
-    Box::new(
-        Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend"),
-    )
+    Box::new(Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend"))
 }

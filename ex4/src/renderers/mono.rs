@@ -126,8 +126,8 @@ impl Renderer for MonoAtlas {
 fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     (
         ((p as u32 >> 11) & 0x1F) << 3,
-        ((p as u32 >>  5) & 0x3F) << 2,
-        ((p as u32      ) & 0x1F) << 3,
+        ((p as u32 >> 5) & 0x3F) << 2,
+        ((p as u32) & 0x1F) << 3,
     )
 }
 
@@ -135,8 +135,8 @@ fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
 fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     (
         (p as u32 >> 16) & 0xFF,
-        (p as u32 >>  8) & 0xFF,
-        (p as u32      ) & 0xFF,
+        (p as u32 >> 8) & 0xFF,
+        (p as u32) & 0xFF,
     )
 }
 
@@ -179,8 +179,12 @@ pub(super) fn rasterise_alpha(
 pub(super) fn blend_into(
     dst: &mut [Pixel],
     alpha: &[u8],
-    fg_r: u32, fg_g: u32, fg_b: u32,
-    bg_r: u32, bg_g: u32, bg_b: u32,
+    fg_r: u32,
+    fg_g: u32,
+    fg_b: u32,
+    bg_r: u32,
+    bg_g: u32,
+    bg_b: u32,
 ) {
     for (d, &a) in dst.iter_mut().zip(alpha.iter()) {
         let a = a as u32;

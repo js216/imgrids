@@ -1,7 +1,7 @@
 use imgrids::{
     layout::{cell, col, resolve, row},
     renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
-    Pixel, rgb
+    rgb, Pixel,
 };
 
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
@@ -9,10 +9,10 @@ use imgrids::fonts::font_terminus_8x16::FONT as FONT_TER;
 use imgrids::fonts::font_vga16::FONT as FONT_VGA;
 
 const WHITE: Pixel = rgb!(255, 255, 255);
-const BLACK: Pixel = rgb!(  0,   0,   0);
-const RED:   Pixel = rgb!(255,   0,   0);
-const GREEN: Pixel = rgb!(  0, 255,   0);
-const BLUE:  Pixel = rgb!(  0,   0, 255);
+const BLACK: Pixel = rgb!(0, 0, 0);
+const RED: Pixel = rgb!(255, 0, 0);
+const GREEN: Pixel = rgb!(0, 255, 0);
+const BLUE: Pixel = rgb!(0, 0, 255);
 
 // ─── Geometry ────────────────────────────────────────────────────────────────
 
@@ -115,7 +115,9 @@ fn main() {
     );
 
     loop {
-        if backend.poll_quit() { break; }
+        if backend.poll_quit() {
+            break;
+        }
 
         backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
         backend.render(&mut |pixels, stride| {

@@ -1,13 +1,12 @@
-pub mod bpp;
 pub mod backends;
+pub mod bpp;
 pub mod fonts;
 pub mod layout;
-pub mod renderer;
 pub mod renderers;
 
 pub use bpp::Pixel;
 pub use layout::{resolve, Cell, Node};
-pub use renderer::Renderer;
+pub use renderers::Renderer;
 
 #[cfg(feature = "fb0")]
 pub use crate::backends::framebuffer::Framebuf;
