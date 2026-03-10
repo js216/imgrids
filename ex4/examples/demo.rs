@@ -1,5 +1,4 @@
 use imgrids::{
-    backends::Backend,
     layout::{cell, col, resolve, row},
     renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
     Pixel,
@@ -8,8 +7,6 @@ use imgrids::{
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
 use imgrids::fonts::font_terminus_8x16::FONT as FONT_TER;
 use imgrids::fonts::font_vga16::FONT as FONT_VGA;
-
-use imgrids::backends::sdl2::Sdl2Backend;
 
 const WHITE: Pixel = 0xFFFF;
 const BLACK: Pixel = 0x0000;
@@ -66,24 +63,7 @@ fn gen_random() -> &'static str {
 }
 
 fn main() {
-    let sdl_context = sdl2::init().expect("SDL2 init");
-    let video = sdl_context.video().expect("SDL2 video");
-    let window = video
-        .window("imgrids demo", SCREEN_W as u32, SCREEN_H as u32)
-        .position_centered()
-        .build()
-        .expect("window");
-    let canvas = window.into_canvas().build().expect("canvas");
-    let event_pump = sdl_context.event_pump().expect("event pump");
-    let creator = canvas.texture_creator();
-    let mut backend = Sdl2Backend::new(
-        &creator,
-        canvas,
-        event_pump,
-        SCREEN_W as u32,
-        SCREEN_H as u32,
-    )
-    .expect("SDL2 backend");
+    let mut backend = imgrids::backends::init(SCREEN_W, SCREEN_H);
 
     // Atlases
     let ch1 = CharsAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
@@ -138,14 +118,8 @@ fn main() {
         WIN_H - 2 * MARGIN_Y,
     );
 
-    'running: loop {
-        for event in backend.event_pump.poll_iter() {
-            use sdl2::event::Event;
-            match event {
-                Event::Quit { .. } => break 'running,
-                _ => {}
-            }
-        }
+    loop {
+        if backend.poll_quit() { break; }
 
         backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
         backend.render(&mut |pixels, stride| {

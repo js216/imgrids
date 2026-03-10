@@ -3,5 +3,5 @@ linker = "arm-linux-gnueabihf-gcc"
 rustflags = ["-C", "target-feature=+crt-static"]
 
 [alias]
-build-fb0 = "build --release --example demo_fb0 --features fb0 --target armv7-unknown-linux-gnueabihf"
-build-sdl = "build --release --example demo_sdl2 --features sdl"
+build-fb0 = "build --release --example demo --features fb0 --target armv7-unknown-linux-gnueabihf"
+build-sdl = "build --release --example demo --features sdl"

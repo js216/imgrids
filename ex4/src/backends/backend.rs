@@ -46,4 +46,8 @@ pub trait Backend {
     ///
     /// * `draw_fn(pixels, stride)` — flat pixel slice and pixels-per-row
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize));
+
+    /// Poll for a quit signal. Returns true once when quit is requested.
+    /// The default implementation always returns false (headless/fb0 backends).
+    fn poll_quit(&mut self) -> bool { false }
 }

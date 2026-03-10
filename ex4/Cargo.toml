@@ -16,12 +16,8 @@ fb0 = []
 sdl = ["dep:sdl2"]
 
 [[example]]
-name = "demo_fb0"
-required-features = ["fb0"]
-
-[[example]]
-name = "demo_sdl2"
-required-features = ["sdl"]
+name = "demo"
+path = "examples/demo.rs"
 
 [profile.release]
 opt-level = 3

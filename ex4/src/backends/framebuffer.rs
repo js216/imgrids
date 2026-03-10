@@ -161,3 +161,7 @@ impl Drop for Framebuf {
         }
     }
 }
+
+pub fn init(_w: usize, _h: usize) -> Box<dyn super::Backend> {
+    Box::new(Framebuf::open("/dev/fb0").expect("open framebuffer"))
+}
