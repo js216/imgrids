@@ -12,7 +12,7 @@ use imgrids::{
     color::*,
     framebuf::Framebuf,
     layout::{cell, col, resolve, row},
-    renderers::{CharsAtlas, MonoAtlas, ShapesAtlas, TtAtlas},
+    renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
 };
 
 use imgrids::renderers::font8x8::FONT as FONT_8X8;
@@ -90,16 +90,16 @@ fn main() {
     // To swap a renderer: change the type on the left and the constructor
     // call on the right — the layout below is unaffected.
 
-    let ch1 = CharsAtlas::new(&FONT_VGA, 8,  32, WHITE, BLACK);
-    let ch2 = CharsAtlas::new(&FONT_VGA, 16, 64, WHITE, BLACK);
-    let ch3 = CharsAtlas::new(&FONT_TER, 8,  32, WHITE, BLACK);
-    let ch4 = CharsAtlas::new(&FONT_TER, 16, 64, WHITE, BLACK);
+    let ch1 = CharsAtlas::new(&FONT_VGA, 16,  32, WHITE, BLACK);
+    let ch2 = CharsAtlas::new(&FONT_VGA, 32, 64, WHITE, BLACK);
+    let ch3 = CharsAtlas::new(&FONT_TER, 16, 32, WHITE, BLACK);
+    let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, WHITE, BLACK);
     let ch5 = CharsAtlas::new(&FONT_8X8,  8, 16, WHITE, BLACK);
     let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, WHITE, BLACK);
-    let ch7 = MonoAtlas::from_ttf("RobotoMono-Regular.ttf", 24, WHITE, BLACK)
-        .expect("load RobotoMono-Regular.ttf");
-    let ch8 = MonoAtlas::from_ttf("RobotoMono-Regular.ttf", 32, WHITE, BLACK)
-        .expect("load RobotoMono-Regular.ttf");
+    let roboto = MonoFont::load("RobotoMono-Regular.ttf").expect("load RobotoMono-Regular.ttf");
+    let myriad = TtFont::load("MyriadPro-Regular.ttf").expect("load MyriadPro-Regular.ttf");
+    let ch7 = roboto.at(32, WHITE, BLACK);
+    let ch8 = myriad.at(32, WHITE, BLACK);
 
     // ── Layout ───────────────────────────────────────────────────────────────
     //

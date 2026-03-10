@@ -9,5 +9,7 @@ pub mod font_vga16;
 
 pub use chars::CharsAtlas;
 pub use mono::MonoAtlas;
+pub use mono::MonoFont;
 pub use shapes::ShapesAtlas;
 pub use tt::TtAtlas;
+pub use tt::TtFont;

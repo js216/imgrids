@@ -1,74 +1,91 @@
 use crate::{Pixel, Renderer};
-use std::fs;
+use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
+
+use super::mono::{blend_into, channels, rasterise_alpha};
+
+// ─── Font (parsed TTF, shareable) ────────────────────────────────────────────
+
+pub struct TtFont {
+    font: FontVec,
+}
+
+impl TtFont {
+    pub fn load(path: &str) -> io::Result<Self> {
+        let data = std::fs::read(path)
+            .map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
+        let font = FontVec::try_from_vec(data)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+        Ok(TtFont { font })
+    }
+
+    pub fn at(&self, cell_h: usize, fg: Pixel, bg: Pixel) -> TtAtlas {
+        TtAtlas::bake(&self.font, cell_h, fg, bg)
+    }
+}
+
+// ─── Atlas (baked pixels for one size+colour combination) ────────────────────
 
 pub struct TtAtlas {
     cell_h:  usize,
+    /// Per-glyph advance width in pixels; 0 = no glyph
     adv:     [usize; 128],
+    /// Flat buffer of all glyph bitmaps concatenated (variable width × cell_h)
     buf:     Vec<Pixel>,
-    offsets: [Option<usize>; 128],
+    /// Index into buf for each glyph
+    offsets: [usize; 128],
 }
 
 impl TtAtlas {
-    pub fn load(path: &str, fg: Pixel, bg: Pixel) -> io::Result<Self> {
-        let data = fs::read(path)?;
-        let mut cur = 0usize;
+    /// Convenience: load font and bake in one step.
+    pub fn from_ttf(path: &str, cell_h: usize, fg: Pixel, bg: Pixel) -> io::Result<Self> {
+        Ok(TtFont::load(path)?.at(cell_h, fg, bg))
+    }
 
-        if data.len() < 4 {
-            return Err(io_err("tt: truncated header"));
-        }
-        let cell_h = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
-        cur += 4;
+    fn bake(font: &FontVec, cell_h: usize, fg: Pixel, bg: Pixel) -> Self {
+        let scale = {
+            let raw = PxScale::from(cell_h as f32);
+            let sf  = font.as_scaled(raw);
+            let natural_h = sf.ascent() - sf.descent();
+            PxScale::from((cell_h as f32 / natural_h) * cell_h as f32)
+        };
+        let sf       = font.as_scaled(scale);
+        let baseline = sf.ascent();
 
-        if data.len() < cur + 128 * 2 {
-            return Err(io_err("tt: truncated widths"));
-        }
-        let mut aw = [0u16; 128];
-        for i in 0..128 {
-            aw[i] = u16::from_le_bytes(data[cur..cur + 2].try_into().unwrap());
-            cur += 2;
-        }
-
-        // Decompose fg/bg RGB565 → 8-bit channels for alpha blending.
-        let fg_r = (((fg >> 11) & 0x1F) << 3) as u32;
-        let fg_g = (((fg >>  5) & 0x3F) << 2) as u32;
-        let fg_b = (( fg        & 0x1F) << 3) as u32;
-        let bg_r = (((bg >> 11) & 0x1F) << 3) as u32;
-        let bg_g = (((bg >>  5) & 0x3F) << 2) as u32;
-        let bg_b = (( bg        & 0x1F) << 3) as u32;
-
-        let total: usize = aw.iter().map(|&w| w as usize * cell_h).sum();
-        let mut buf     = vec![0u16; total];
-        let mut offsets = [None; 128];
+        // Measure all advance widths up front so we can allocate buf once.
         let mut adv     = [0usize; 128];
-        let mut ptr     = 0usize;
+        let mut offsets = [0usize; 128];
+        for code in 0u8..128 {
+            adv[code as usize] = sf.h_advance(font.glyph_id(code as char)).ceil() as usize;
+        }
 
-        for code in 0..128usize {
-            let gw = aw[code] as usize;
-            adv[code] = gw;
+        let total: usize = adv.iter().map(|&w| w * cell_h).sum();
+        let mut buf   = vec![bg; total];
+        let mut ptr   = 0usize;
+
+        let (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b) = channels(fg, bg);
+
+        for code in 0u8..128 {
+            let gw = adv[code as usize];
+            offsets[code as usize] = ptr;
             if gw == 0 { continue; }
 
-            offsets[code] = Some(ptr);
-            let n = gw * cell_h;
+            let id    = font.glyph_id(code as char);
+            let lsb   = sf.h_side_bearing(id);
+            let glyph = id.with_scale_and_position(scale, ab_glyph::point(-lsb, baseline));
 
-            if data.len() < cur + n {
-                return Err(io_err("tt: truncated glyph"));
-            }
-            let mask = &data[cur..cur + n];
-            cur += n;
+            let n          = gw * cell_h;
+            let mut alpha  = vec![0u8; n];
 
-            for i in 0..n {
-                let a   = mask[i] as u32;
-                let inv = 255 - a;
-                let r = ((fg_r * a + bg_r * inv) / 255) as u16;
-                let g = ((fg_g * a + bg_g * inv) / 255) as u16;
-                let b = ((fg_b * a + bg_b * inv) / 255) as u16;
-                buf[ptr + i] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+            if let Some(outlined) = font.outline_glyph(glyph) {
+                rasterise_alpha(&outlined, &mut alpha, gw, cell_h);
             }
+
+            blend_into(&mut buf[ptr..ptr + n], &alpha, fg_r, fg_g, fg_b, bg_r, bg_g, bg_b);
             ptr += n;
         }
 
-        Ok(TtAtlas { cell_h, adv, buf, offsets })
+        TtAtlas { cell_h, adv, buf, offsets }
     }
 
     #[inline]
@@ -76,7 +93,7 @@ impl TtAtlas {
         let code = code & 0x7F;
         let gw   = self.adv[code];
         if gw == 0 { return None; }
-        let off  = self.offsets[code]?;
+        let off  = self.offsets[code];
         Some((&self.buf[off..off + gw * self.cell_h], gw))
     }
 }
@@ -88,8 +105,8 @@ impl Renderer for TtAtlas {
         for byte in text.bytes() {
             if let Some((src, gw)) = self.glyph(byte as usize) {
                 for gy in 0..ch {
-                    let dst_start = (y + gy) * stride + cx;
-                    fb[dst_start..dst_start + gw].copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+                    let dst = (y + gy) * stride + cx;
+                    fb[dst..dst + gw].copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
                 }
                 cx += gw;
             }
@@ -103,8 +120,4 @@ impl Renderer for TtAtlas {
     fn text_width(&self, text: &str) -> usize {
         text.bytes().map(|b| self.adv[b as usize & 0x7F]).sum()
     }
-}
-
-fn io_err(msg: &'static str) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, msg)
 }
