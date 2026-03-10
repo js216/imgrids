@@ -1,11 +1,11 @@
+pub mod bpp;
 pub mod backends;
 pub mod fonts;
 pub mod layout;
 pub mod renderer;
 pub mod renderers;
 
-pub type Pixel = u16;
-
+pub use bpp::Pixel;
 pub use layout::{resolve, Cell, Node};
 pub use renderer::Renderer;
 

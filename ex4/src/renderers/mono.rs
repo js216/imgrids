@@ -27,7 +27,7 @@ impl MonoFont {
 pub struct MonoAtlas {
     cell_w: usize,
     cell_h: usize,
-    /// Flat: [128][cell_w * cell_h], composited fg/bg in native RGB565
+    /// Flat: [128][cell_w * cell_h], composited fg/bg in native pixel format
     glyphs: Vec<Pixel>,
 }
 
@@ -121,19 +121,41 @@ impl Renderer for MonoAtlas {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-/// Expand RGB565 fg/bg into 8-bit channels for alpha blending.
-pub(super) fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {
-    let ch = |p: Pixel, shift: u32, mask: u32, expand: u32| -> u32 {
-        ((p as u32 >> shift) & mask) << expand
-    };
+/// Unpack a Pixel into 8-bit RGB channels.
+#[cfg(feature = "bpp16")]
+fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     (
-        ch(fg, 11, 0x1F, 3),
-        ch(fg, 5, 0x3F, 2),
-        ch(fg, 0, 0x1F, 3),
-        ch(bg, 11, 0x1F, 3),
-        ch(bg, 5, 0x3F, 2),
-        ch(bg, 0, 0x1F, 3),
+        ((p as u32 >> 11) & 0x1F) << 3,
+        ((p as u32 >>  5) & 0x3F) << 2,
+        ((p as u32      ) & 0x1F) << 3,
     )
+}
+
+#[cfg(feature = "bpp32")]
+fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
+    (
+        (p as u32 >> 16) & 0xFF,
+        (p as u32 >>  8) & 0xFF,
+        (p as u32      ) & 0xFF,
+    )
+}
+
+/// Pack 8-bit RGB channels into a Pixel.
+#[cfg(feature = "bpp16")]
+fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
+}
+
+#[cfg(feature = "bpp32")]
+fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    ((r << 16) | (g << 8) | b) as Pixel
+}
+
+/// Expand fg/bg Pixels into 8-bit channels for alpha blending.
+pub(super) fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {
+    let (fg_r, fg_g, fg_b) = to_rgb888(fg);
+    let (bg_r, bg_g, bg_b) = to_rgb888(bg);
+    (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b)
 }
 
 /// Rasterise an outlined glyph into an alpha buffer (clamped to cell bounds).
@@ -153,23 +175,19 @@ pub(super) fn rasterise_alpha(
     });
 }
 
-/// Alpha-blend an 8-bit alpha buffer into a Pixel slice (RGB565 output).
+/// Alpha-blend an 8-bit alpha buffer into a Pixel slice.
 pub(super) fn blend_into(
     dst: &mut [Pixel],
     alpha: &[u8],
-    fg_r: u32,
-    fg_g: u32,
-    fg_b: u32,
-    bg_r: u32,
-    bg_g: u32,
-    bg_b: u32,
+    fg_r: u32, fg_g: u32, fg_b: u32,
+    bg_r: u32, bg_g: u32, bg_b: u32,
 ) {
     for (d, &a) in dst.iter_mut().zip(alpha.iter()) {
         let a = a as u32;
         let inv = 255 - a;
-        let r = ((fg_r * a + bg_r * inv) / 255) as u16;
-        let g = ((fg_g * a + bg_g * inv) / 255) as u16;
-        let b = ((fg_b * a + bg_b * inv) / 255) as u16;
-        *d = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+        let r = (fg_r * a + bg_r * inv) / 255;
+        let g = (fg_g * a + bg_g * inv) / 255;
+        let b = (fg_b * a + bg_b * inv) / 255;
+        *d = rgb888_to_pixel(r, g, b);
     }
 }

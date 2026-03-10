@@ -1,22 +1,18 @@
 use imgrids::{
     layout::{cell, col, resolve, row},
     renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
-    Pixel,
+    Pixel, rgb
 };
 
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
 use imgrids::fonts::font_terminus_8x16::FONT as FONT_TER;
 use imgrids::fonts::font_vga16::FONT as FONT_VGA;
 
-const WHITE: Pixel = 0xFFFF;
-const BLACK: Pixel = 0x0000;
-const RED: Pixel = 0xF800;
-const GREEN: Pixel = 0x07E0;
-const BLUE: Pixel = 0x001F;
-const ROSE: Pixel = 0xFCB6;
-const MINT: Pixel = 0x97F6;
-const SKY: Pixel = 0x9E3F;
-const LAVENDER: Pixel = 0xCCBF;
+const WHITE: Pixel = rgb!(255, 255, 255);
+const BLACK: Pixel = rgb!(  0,   0,   0);
+const RED:   Pixel = rgb!(255,   0,   0);
+const GREEN: Pixel = rgb!(  0, 255,   0);
+const BLUE:  Pixel = rgb!(  0,   0, 255);
 
 // ─── Geometry ────────────────────────────────────────────────────────────────
 
@@ -70,12 +66,12 @@ fn main() {
     let ch2 = CharsAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
     let ch3 = CharsAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
     let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
-    let ch5 = CharsAtlas::new(&FONT_8X8, 8, 16, MINT, BLACK);
-    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, SKY, BLACK);
+    let ch5 = CharsAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK);
+    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, RED, BLACK);
     let roboto = MonoFont::load("fonts/RobotoMono-Regular.ttf").expect("font");
     let myriad = TtFont::load("fonts/MyriadPro-Regular.ttf").expect("font");
-    let ch7 = roboto.at(32, ROSE, BLACK);
-    let ch8 = myriad.at(32, LAVENDER, BLACK);
+    let ch7 = roboto.at(32, GREEN, BLACK);
+    let ch8 = myriad.at(32, BLUE, BLACK);
 
     // Layout
     let layout = row(
