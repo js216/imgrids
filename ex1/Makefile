@@ -6,11 +6,11 @@ all: $(PROGS)
 tt: Roboto-Regular.font
 mono: RobotoMono-Regular.font
 
-%.font: ../fonts/%.ttf Makefile
-	python3 ../fonts/font_to_bin.py $< $(FONT_SIZE) > $@
+%.font: fonts/%.ttf Makefile
+	python3 fonts/font_to_bin.py $< $(FONT_SIZE) > $@
 
 %: %.c Makefile
-	$(CC) -I../fonts $(CFLAGS) $< -o $@
+	$(CC) -Ifonts $(CFLAGS) $< -o $@
 
 clean:
 	rm -f $(PROGS) *.font
