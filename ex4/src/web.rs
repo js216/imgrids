@@ -1,6 +1,6 @@
-use crate::Pixel;
-use super::Backend;
 use super::sdl2::Sdl2Backend;
+use super::Backend;
+use crate::Pixel;
 
 extern "C" {
     fn emscripten_sleep(ms: u32);
@@ -9,10 +9,16 @@ extern "C" {
 pub struct WebBackend(Sdl2Backend);
 
 impl Backend for WebBackend {
-    fn width(&self)  -> usize { self.0.width()  }
-    fn height(&self) -> usize { self.0.height() }
+    fn width(&self) -> usize {
+        self.0.width()
+    }
+    fn height(&self) -> usize {
+        self.0.height()
+    }
 
-    fn clear(&mut self, color: Pixel) { self.0.clear(color) }
+    fn clear(&mut self, color: Pixel) {
+        self.0.clear(color)
+    }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
         self.0.fill_rect(x, y, w, h, color)
@@ -23,7 +29,9 @@ impl Backend for WebBackend {
         unsafe { emscripten_sleep(1) };
     }
 
-    fn poll_quit(&mut self) -> bool { self.0.poll_quit() }
+    fn poll_quit(&mut self) -> bool {
+        self.0.poll_quit()
+    }
 }
 
 pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
@@ -40,11 +48,11 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
         .expect("window");
     let canvas = window
         .into_canvas()
-        .software()          // ← explicit software renderer
+        .software() // ← explicit software renderer
         .build()
         .expect("canvas");
     let event_pump = sdl.event_pump().expect("event pump");
     Box::new(WebBackend(
-        Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend")
+        Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend"),
     ))
 }

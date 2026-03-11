@@ -36,7 +36,7 @@ macro_rules! rgb {
 // Renderers
 ////////////////////////////////////////////////////////////////////////////////
 
-pub trait Renderer: {
+pub trait Renderer {
     fn draw(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str);
     fn cell_height(&self) -> usize;
     fn char_width(&self, c: char) -> usize;
@@ -59,7 +59,15 @@ pub trait Backend {
     fn clear(&mut self, color: Pixel);
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel);
 
-    fn draw_border(&mut self, x: usize, y: usize, w: usize, h: usize, thickness: usize, color: Pixel) {
+    fn draw_border(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        thickness: usize,
+        color: Pixel,
+    ) {
         self.fill_rect(x, y, w, thickness, color);
         self.fill_rect(x, y + h - thickness, w, thickness, color);
         self.fill_rect(x, y, thickness, h, color);
@@ -70,7 +78,9 @@ pub trait Backend {
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize));
 
     /// Returns `true` when a quit event is pending. Defaults to `false`.
-    fn poll_quit(&mut self) -> bool { false }
+    fn poll_quit(&mut self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "fb0")]

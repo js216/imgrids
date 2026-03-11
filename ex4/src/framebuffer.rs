@@ -6,6 +6,9 @@ use std::ptr;
 
 const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
 const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
+const FBIOBLANK: libc::c_ulong = 0x4611;
+const FB_BLANK_UNBLANK: libc::c_int = 0;
+const FB_BLANK_POWERDOWN: libc::c_int = 4;
 
 #[repr(C)]
 #[derive(Default)]
@@ -80,6 +83,9 @@ impl Framebuf {
             }
             if libc::ioctl(fd, FBIOGET_FSCREENINFO, &mut finfo) < 0 {
                 return Err("ioctl FBIOGET_FSCREENINFO failed".into());
+            }
+            if libc::ioctl(fd, FBIOBLANK, FB_BLANK_UNBLANK) < 0 {
+                return Err("ioctl FBIOBLANK failed".into());
             }
         }
 
@@ -156,6 +162,7 @@ impl Backend for Framebuf {
 impl Drop for Framebuf {
     fn drop(&mut self) {
         unsafe {
+            libc::ioctl(self.fd, FBIOBLANK, FB_BLANK_POWERDOWN);
             libc::munmap(self.mmap_ptr, self.mmap_size);
             libc::close(self.fd);
         }

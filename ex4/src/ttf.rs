@@ -76,7 +76,12 @@ impl TtfAtlas {
             ptr += n;
         }
 
-        TtfAtlas { cell_h, adv, buf, offsets }
+        TtfAtlas {
+            cell_h,
+            adv,
+            buf,
+            offsets,
+        }
     }
 
     #[inline]

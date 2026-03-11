@@ -1,8 +1,9 @@
 use imgrids::{
     layout::{cell, col, resolve, row},
     raster::RasterAtlas,
+    rgb,
     ttf::TtfAtlas,
-    rgb, Pixel,
+    Pixel,
 };
 
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
@@ -22,8 +23,8 @@ const SCREEN_H: usize = 480;
 
 const WIN_X: usize = 40;
 const WIN_Y: usize = 40;
-const WIN_W: usize = 720;
-const WIN_H: usize = 400;
+const WIN_W: usize = SCREEN_W - 2 * WIN_X;
+const WIN_H: usize = SCREEN_H - 2 * WIN_Y;
 
 const MARGIN_X: usize = 20;
 const MARGIN_Y: usize = 20;
