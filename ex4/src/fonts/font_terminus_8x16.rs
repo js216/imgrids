@@ -4,7 +4,7 @@
 // Licensed under the SIL Open Font License, Version 1.1.
 // Each entry: 16 bytes, one per row. Bit N of byte Y = pixel at (col N, row Y).
 
-use crate::renderers::chars::BitmapFont;
+use crate::raster::BitmapFont;
 
 static FONT_BITMAP: [u8; 2048] = [
     0x00, 0x00, 0x66, 0x42, 0x00, 0x42, 0x42, 0x42, 0x00, 0x42, 0x42, 0x66, 0x00, 0x00, 0x00,

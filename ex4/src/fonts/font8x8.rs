@@ -2,7 +2,7 @@
 // Source: https://github.com/dhepper/font8x8 (CC0 / public domain)
 // Each entry: 8 bytes, one per row. Bit N of byte Y = pixel at (col N, row Y).
 
-use crate::renderers::chars::BitmapFont;
+use crate::raster::BitmapFont;
 
 static FONT_BITMAP: [u8; 1024] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // U+0000

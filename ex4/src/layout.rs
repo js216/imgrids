@@ -8,7 +8,7 @@
 //           cell(&my_renderer, gen_world),
 //       ]),
 //       row(10, vec![
-//           cell(&shapes, gen_random),
+//           cell(&my_renderer, gen_random),
 //       ]),
 //   ]);
 //

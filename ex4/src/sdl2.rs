@@ -1,4 +1,4 @@
-use crate::backends::Backend;
+use crate::Backend;
 use crate::Pixel;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};

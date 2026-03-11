@@ -2,39 +2,25 @@ use crate::{Pixel, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
 
-// ─── Font (parsed TTF, shareable) ────────────────────────────────────────────
+// ─── Atlas (baked pixels for one size+colour combination) ────────────────────
 
-pub struct MonoFont {
-    font: FontVec,
+pub struct TtfAtlas {
+    cell_h: usize,
+    /// Per-glyph advance width in pixels; 0 = no glyph
+    adv: [usize; 128],
+    /// Flat buffer of all glyph bitmaps concatenated (variable width × cell_h)
+    buf: Vec<Pixel>,
+    /// Index into buf for each glyph
+    offsets: [usize; 128],
 }
 
-impl MonoFont {
-    pub fn load(path: &str) -> io::Result<Self> {
+impl TtfAtlas {
+    pub fn new(path: &str, cell_h: usize, fg: Pixel, bg: Pixel) -> io::Result<Self> {
         let data =
             std::fs::read(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
         let font = FontVec::try_from_vec(data)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-        Ok(MonoFont { font })
-    }
-
-    pub fn at(&self, cell_h: usize, fg: Pixel, bg: Pixel) -> MonoAtlas {
-        MonoAtlas::bake(&self.font, cell_h, fg, bg)
-    }
-}
-
-// ─── Atlas (baked pixels for one size+colour combination) ────────────────────
-
-pub struct MonoAtlas {
-    cell_w: usize,
-    cell_h: usize,
-    /// Flat: [128][cell_w * cell_h], composited fg/bg in native pixel format
-    glyphs: Vec<Pixel>,
-}
-
-impl MonoAtlas {
-    /// Convenience: load font and bake in one step.
-    pub fn from_ttf(path: &str, cell_h: usize, fg: Pixel, bg: Pixel) -> io::Result<Self> {
-        Ok(MonoFont::load(path)?.at(cell_h, fg, bg))
+        Ok(Self::bake(&font, cell_h, fg, bg))
     }
 
     fn bake(font: &FontVec, cell_h: usize, fg: Pixel, bg: Pixel) -> Self {
@@ -47,31 +33,38 @@ impl MonoAtlas {
         let sf = font.as_scaled(scale);
         let baseline = sf.ascent();
 
-        // cell_w = widest advance across all 128 glyphs
-        let cell_w = (0u8..128)
-            .map(|c| sf.h_advance(font.glyph_id(c as char)).ceil() as usize)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+        let mut adv = [0usize; 128];
+        let mut offsets = [0usize; 128];
+        for code in 0u8..128 {
+            adv[code as usize] = sf.h_advance(font.glyph_id(code as char)).ceil() as usize;
+        }
+
+        let total: usize = adv.iter().map(|&w| w * cell_h).sum();
+        let mut buf = vec![bg; total];
+        let mut ptr = 0usize;
 
         let (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b) = channels(fg, bg);
 
-        let cells = cell_w * cell_h;
-        let mut glyphs = vec![bg; 128 * cells];
-        let mut alpha = vec![0u8; cells];
-
         for code in 0u8..128 {
+            let gw = adv[code as usize];
+            offsets[code as usize] = ptr;
+            if gw == 0 {
+                continue;
+            }
+
             let id = font.glyph_id(code as char);
             let lsb = sf.h_side_bearing(id);
             let glyph = id.with_scale_and_position(scale, ab_glyph::point(-lsb, baseline));
 
-            alpha.fill(0);
+            let n = gw * cell_h;
+            let mut alpha = vec![0u8; n];
+
             if let Some(outlined) = font.outline_glyph(glyph) {
-                rasterise_alpha(&outlined, &mut alpha, cell_w, cell_h);
+                rasterise_alpha(&outlined, &mut alpha, gw, cell_h);
             }
 
             blend_into(
-                &mut glyphs[code as usize * cells..(code as usize + 1) * cells],
+                &mut buf[ptr..ptr + n],
                 &alpha,
                 fg_r,
                 fg_g,
@@ -80,48 +73,56 @@ impl MonoAtlas {
                 bg_g,
                 bg_b,
             );
+            ptr += n;
         }
 
-        MonoAtlas {
-            cell_w,
-            cell_h,
-            glyphs,
-        }
+        TtfAtlas { cell_h, adv, buf, offsets }
     }
 
     #[inline]
-    fn glyph(&self, code: usize) -> &[Pixel] {
-        let n = self.cell_w * self.cell_h;
-        let i = code & 0x7F;
-        &self.glyphs[i * n..i * n + n]
+    fn glyph(&self, code: usize) -> Option<(&[Pixel], usize)> {
+        let code = code & 0x7F;
+        let gw = self.adv[code];
+        if gw == 0 {
+            return None;
+        }
+        let off = self.offsets[code];
+        Some((&self.buf[off..off + gw * self.cell_h], gw))
     }
 }
 
-impl Renderer for MonoAtlas {
+impl Renderer for TtfAtlas {
     fn draw(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
-        let (cw, ch) = (self.cell_w, self.cell_h);
+        let ch = self.cell_h;
         let mut cx = x;
         for byte in text.bytes() {
-            let src = self.glyph(byte as usize);
-            for gy in 0..ch {
-                let dst = (y + gy) * stride + cx;
-                fb[dst..dst + cw].copy_from_slice(&src[gy * cw..(gy + 1) * cw]);
+            if let Some((src, gw)) = self.glyph(byte as usize) {
+                for gy in 0..ch {
+                    let dst = (y + gy) * stride + cx;
+                    fb[dst..dst + gw].copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+                }
+                cx += gw;
             }
-            cx += cw;
         }
     }
 
     fn cell_height(&self) -> usize {
         self.cell_h
     }
-    fn char_width(&self, _: char) -> usize {
-        self.cell_w
+    fn char_width(&self, c: char) -> usize {
+        if c.is_ascii() {
+            self.adv[c as usize]
+        } else {
+            0
+        }
+    }
+    fn text_width(&self, text: &str) -> usize {
+        text.bytes().map(|b| self.adv[b as usize & 0x7F]).sum()
     }
 }
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Unpack a Pixel into 8-bit RGB channels.
 #[cfg(feature = "bpp16")]
 fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     (
@@ -140,7 +141,6 @@ fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     )
 }
 
-/// Pack 8-bit RGB channels into a Pixel.
 #[cfg(feature = "bpp16")]
 fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
     (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
@@ -151,15 +151,13 @@ fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
     ((r << 16) | (g << 8) | b) as Pixel
 }
 
-/// Expand fg/bg Pixels into 8-bit channels for alpha blending.
-pub(super) fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {
+fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {
     let (fg_r, fg_g, fg_b) = to_rgb888(fg);
     let (bg_r, bg_g, bg_b) = to_rgb888(bg);
     (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b)
 }
 
-/// Rasterise an outlined glyph into an alpha buffer (clamped to cell bounds).
-pub(super) fn rasterise_alpha(
+fn rasterise_alpha(
     outlined: &ab_glyph::OutlinedGlyph,
     alpha: &mut [u8],
     cell_w: usize,
@@ -175,8 +173,7 @@ pub(super) fn rasterise_alpha(
     });
 }
 
-/// Alpha-blend an 8-bit alpha buffer into a Pixel slice.
-pub(super) fn blend_into(
+fn blend_into(
     dst: &mut [Pixel],
     alpha: &[u8],
     fg_r: u32,

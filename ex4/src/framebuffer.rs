@@ -1,4 +1,4 @@
-use crate::backends::Backend;
+use crate::Backend;
 use crate::Pixel;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;

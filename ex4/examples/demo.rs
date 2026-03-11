@@ -1,6 +1,7 @@
 use imgrids::{
     layout::{cell, col, resolve, row},
-    renderers::{CharsAtlas, MonoAtlas, MonoFont, ShapesAtlas, TtAtlas, TtFont},
+    raster::RasterAtlas,
+    ttf::TtfAtlas,
     rgb, Pixel,
 };
 
@@ -59,19 +60,17 @@ fn gen_random() -> &'static str {
 }
 
 fn main() {
-    let mut backend = imgrids::backends::init(SCREEN_W, SCREEN_H);
+    let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
     // Atlases
-    let ch1 = CharsAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
-    let ch2 = CharsAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
-    let ch3 = CharsAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
-    let ch4 = CharsAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
-    let ch5 = CharsAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK);
-    let ch6 = CharsAtlas::new(&FONT_8X8, 16, 32, RED, BLACK);
-    let roboto = MonoFont::load("fonts/RobotoMono-Regular.ttf").expect("font");
-    let myriad = TtFont::load("fonts/MyriadPro-Regular.ttf").expect("font");
-    let ch7 = roboto.at(32, GREEN, BLACK);
-    let ch8 = myriad.at(32, BLUE, BLACK);
+    let ch1 = RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
+    let ch2 = RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
+    let ch3 = RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
+    let ch4 = RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
+    let ch5 = RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK);
+    let ch6 = RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK);
+    let ch7 = TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font");
+    let ch8 = TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font");
 
     // Layout
     let layout = row(
@@ -143,7 +142,5 @@ macro_rules! impl_as_renderer {
         }
     };
 }
-impl_as_renderer!(ShapesAtlas);
-impl_as_renderer!(CharsAtlas);
-impl_as_renderer!(MonoAtlas);
-impl_as_renderer!(TtAtlas);
+impl_as_renderer!(RasterAtlas);
+impl_as_renderer!(TtfAtlas);

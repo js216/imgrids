@@ -1,13 +1,12 @@
 // Bitmap font renderer — scales any embedded font to any cell size using
 // nearest-neighbour sampling, baking fg/bg at init time.
-// Mirrors chars.c.
 
 use crate::{Pixel, Renderer};
 
 /// Describes a compiled-in bitmap font.
 ///
 /// Font files expose a `pub static` of this type; callers pass a reference
-/// to `CharsAtlas::new` to select the font at atlas-creation time.
+/// to `RasterAtlas::new` to select the font at atlas-creation time.
 pub struct BitmapFont {
     pub font_w: usize,
     pub font_h: usize,
@@ -23,7 +22,7 @@ impl BitmapFont {
     }
 }
 
-pub struct CharsAtlas {
+pub struct RasterAtlas {
     glyph_w: usize,
     glyph_h: usize,
     font: &'static BitmapFont,
@@ -31,7 +30,7 @@ pub struct CharsAtlas {
     glyphs: Vec<Pixel>,
 }
 
-impl CharsAtlas {
+impl RasterAtlas {
     pub fn new(
         font: &'static BitmapFont,
         glyph_w: usize,
@@ -52,7 +51,7 @@ impl CharsAtlas {
                 bg,
             );
         }
-        CharsAtlas {
+        RasterAtlas {
             glyph_w,
             glyph_h,
             font,
@@ -68,7 +67,7 @@ impl CharsAtlas {
     }
 }
 
-impl Renderer for CharsAtlas {
+impl Renderer for RasterAtlas {
     fn draw(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
         let (gw, gh) = (self.glyph_w, self.glyph_h);
         let mut cx = x;

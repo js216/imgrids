@@ -3,7 +3,7 @@
 // Public domain / freely redistributable.
 // Each entry: 16 bytes, one per row. Bit N of byte Y = pixel at (col N, row Y).
 
-use crate::renderers::chars::BitmapFont;
+use crate::raster::BitmapFont;
 
 static FONT_BITMAP: [u8; 2048] = [
     0x00, 0x00, 0x3c, 0x42, 0x99, 0xa5, 0x85, 0x85, 0xa5, 0x99, 0x42, 0x3c, 0x00, 0x00, 0x00,

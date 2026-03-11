@@ -26,4 +26,4 @@ window.addEventListener("click", () => window.focus());
 {js}
 </script>
 </body></html>"""
-pathlib.Path(path + "/demo.html").write_text(html)
+pathlib.Path(path + "/index.html").write_text(html)
