@@ -36,14 +36,14 @@ const BORDER: usize = 4;
 
 // --- Text generators ---------------------------------------------------------
 
-fn gen_hello() -> &'static str {
-    "Hello!    "
+fn gen_hello() -> String {
+    "Hello!    ".to_string()
 }
-fn gen_world() -> &'static str {
-    "World!    "
+fn gen_world() -> String {
+    "World!    ".to_string()
 }
 
-fn gen_random() -> &'static str {
+fn gen_random() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static STATE: AtomicU64 = AtomicU64::new(0x853C49E6748FEA9B);
     let mut s = STATE.load(Ordering::Relaxed);
@@ -51,17 +51,13 @@ fn gen_random() -> &'static str {
     s ^= s >> 7;
     s ^= s << 17;
     STATE.store(s, Ordering::Relaxed);
-    thread_local! { static BUF: std::cell::RefCell<[u8; 10]> = const { std::cell::RefCell::new([0u8; 10]) }; }
-    BUF.with(|b| {
-        let mut buf = b.borrow_mut();
-        let mut v = s;
-        for i in 0..10 {
-            buf[i] = (32 + (v & 0x5F) as u8) % 95 + 32;
-            v >>= 6;
-        }
-        let s_slice = unsafe { std::str::from_utf8_unchecked(&*buf) };
-        unsafe { std::mem::transmute::<&str, &'static str>(s_slice) }
-    })
+    let mut buf = [0u8; 10];
+    let mut v = s;
+    for b in &mut buf {
+        *b = (32 + (v & 0x5F) as u8) % 95 + 32;
+        v >>= 6;
+    }
+    String::from_utf8(buf.to_vec()).expect("bytes are printable ASCII")
 }
 
 fn main() {
@@ -72,19 +68,14 @@ fn main() {
     let led_gen = Arc::clone(&led);
     let led_action = Arc::clone(&led);
 
-    // Atlases - leaked so their 'static references satisfy web::run's bound.
-    let ch1 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK)));
-    let ch2 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK)));
-    let ch3 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK)));
-    let ch4 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK)));
-    let ch5 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK)));
-    let ch6 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK)));
-    let ch7 = &*Box::leak(Box::new(
-        TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font"),
-    ));
-    let ch8 = &*Box::leak(Box::new(
-        TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font"),
-    ));
+    let ch1 = RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
+    let ch2 = RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
+    let ch3 = RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
+    let ch4 = RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
+    let ch5 = RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK);
+    let ch6 = RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK);
+    let ch7 = TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font");
+    let ch8 = TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font");
 
     // Layout
     let layout = row(
@@ -97,9 +88,9 @@ fn main() {
                         ch1.as_renderer(),
                         move || {
                             if led_gen.load(Relaxed) {
-                                "Turn LED off"
+                                "Turn LED off".to_string()
                             } else {
-                                "Turn LED on"
+                                "Turn LED on".to_string()
                             }
                         },
                         move || {

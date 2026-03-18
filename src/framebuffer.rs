@@ -99,9 +99,6 @@ struct FbFixScreenInfo {
 }
 
 pub struct Framebuf {
-    /// Direct alias into the mmap - Pixel is the native hardware type (u16 RGB565).
-    /// stride accounts for hardware line padding; always use it for row offsets.
-    pub pixels: &'static mut [Pixel],
     pub stride: usize,
     pub width: usize,
     pub height: usize,
@@ -111,6 +108,18 @@ pub struct Framebuf {
     input_fd: Option<i32>,
     touch: TouchState,
     events: Vec<InputEvent>,
+}
+
+impl Framebuf {
+    /// Slice into the mmap'd pixel buffer.  Lifetime is tied to `&mut self`.
+    fn pixels_mut(&mut self) -> &mut [Pixel] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.mmap_ptr as *mut Pixel,
+                self.mmap_size / size_of::<Pixel>(),
+            )
+        }
+    }
 }
 
 impl Framebuf {
@@ -165,10 +174,6 @@ impl Framebuf {
 
         std::mem::forget(file);
 
-        let pixels = unsafe {
-            std::slice::from_raw_parts_mut(mmap_ptr as *mut Pixel, mmap_size / pixel_bytes)
-        };
-
         let input_fd = unsafe {
             let path = b"/dev/input/event0\0";
             let ifd = libc::open(
@@ -183,7 +188,6 @@ impl Framebuf {
         };
 
         Ok(Framebuf {
-            pixels,
             stride,
             width: vinfo.xres as usize,
             height: vinfo.yres as usize,
@@ -207,18 +211,21 @@ impl Backend for Framebuf {
 
     #[inline]
     fn clear(&mut self, color: Pixel) {
-        self.pixels.fill(color);
+        self.pixels_mut().fill(color);
     }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
+        let stride = self.stride;
+        let pixels = self.pixels_mut();
         for row in y..y + h {
-            let start = row * self.stride + x;
-            self.pixels[start..start + w].fill(color);
+            let start = row * stride + x;
+            pixels[start..start + w].fill(color);
         }
     }
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        draw_fn(self.pixels, self.stride);
+        let stride = self.stride;
+        draw_fn(self.pixels_mut(), stride);
     }
 
     fn poll_events(&mut self) -> &[InputEvent] {

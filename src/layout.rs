@@ -26,7 +26,7 @@
 // * `resolve` / `resolve_into` walk the tree and write a flat `Vec<Cell>`.
 //   No further tree access after that.
 // * `Cell::draw` is a dirty-check + one call to `Renderer::draw`; the check
-//   is a pointer comparison (same static str address) so it costs ~1 ns.
+//   is a string-content comparison, fast for the short labels typical here.
 // * Arc overhead is reference-count bumps at resolve time only - never
 //   during the render loop.
 
@@ -36,7 +36,7 @@ use std::sync::Arc;
 // --- Gen ---------------------------------------------------------------------
 
 /// A cheaply-clonable text generator closure.
-pub type Gen = Arc<dyn Fn() -> &'static str + Send + Sync>;
+pub type Gen = Arc<dyn Fn() -> String + Send + Sync>;
 
 /// A cheaply-clonable press-action closure.
 pub type Action = Arc<dyn Fn() + Send + Sync>;
@@ -68,7 +68,7 @@ impl<'r> Node<'r> {
     #[inline]
     pub fn weight(&self) -> u32 {
         match self {
-            Node::Cell { .. }  => 1,
+            Node::Cell { .. } => 1,
             Node::Row { weight, .. } => *weight,
             Node::Col { weight, .. } => *weight,
         }
@@ -77,21 +77,29 @@ impl<'r> Node<'r> {
 
 /// Display-only leaf node.
 ///
-/// `f` can be any `Fn() -> &'static str` - a bare fn pointer works directly.
+/// `f` can be any `Fn() -> String` - a bare fn pointer works directly.
 pub fn cell<'r, F>(renderer: &'r dyn Renderer, f: F) -> Node<'r>
 where
-    F: Fn() -> &'static str + Send + Sync + 'static,
+    F: Fn() -> String + Send + Sync + 'static,
 {
-    Node::Cell { renderer, gen: Arc::new(f), on_press: None }
+    Node::Cell {
+        renderer,
+        gen: Arc::new(f),
+        on_press: None,
+    }
 }
 
 /// Interactive leaf node.  `action` is called when the cell is pressed.
 pub fn button<'r, F, A>(renderer: &'r dyn Renderer, f: F, action: A) -> Node<'r>
 where
-    F: Fn() -> &'static str + Send + Sync + 'static,
+    F: Fn() -> String + Send + Sync + 'static,
     A: Fn() + Send + Sync + 'static,
 {
-    Node::Cell { renderer, gen: Arc::new(f), on_press: Some(Arc::new(action)) }
+    Node::Cell {
+        renderer,
+        gen: Arc::new(f),
+        on_press: Some(Arc::new(action)),
+    }
 }
 
 /// Splits its bounding box horizontally (children side by side).
@@ -126,7 +134,9 @@ impl<'r> Cell<'r> {
     /// Call the press action if one is set.
     #[inline]
     pub fn activate(&self) {
-        if let Some(action) = &self.on_press { action(); }
+        if let Some(action) = &self.on_press {
+            action();
+        }
     }
 
     #[inline]
@@ -142,8 +152,8 @@ impl<'r> Cell<'r> {
         if text == self.last {
             return false;
         }
-        self.last = text.to_string();
-        self.renderer.draw(fb, stride, self.x, self.text_y(), text);
+        self.renderer.draw(fb, stride, self.x, self.text_y(), &text);
+        self.last = text;
         true
     }
 
@@ -151,8 +161,8 @@ impl<'r> Cell<'r> {
     #[inline]
     pub fn force_draw(&mut self, fb: &mut [Pixel], stride: usize) {
         let text = (self.gen)();
-        self.last = text.to_string();
-        self.renderer.draw(fb, stride, self.x, self.text_y(), text);
+        self.renderer.draw(fb, stride, self.x, self.text_y(), &text);
+        self.last = text;
     }
 }
 
@@ -173,13 +183,7 @@ pub fn hit(cells: &[Cell], x: usize, y: usize) -> Option<usize> {
 /// Call once before the loop for a static layout, or every frame for dynamic
 /// layouts.  Use [`resolve_into`] with a pre-allocated Vec to avoid
 /// per-frame allocation.
-pub fn resolve<'r>(
-    root: &Node<'r>,
-    bx: usize,
-    by: usize,
-    bw: usize,
-    bh: usize,
-) -> Vec<Cell<'r>> {
+pub fn resolve<'r>(root: &Node<'r>, bx: usize, by: usize, bw: usize, bh: usize) -> Vec<Cell<'r>> {
     let mut out = Vec::new();
     resolve_into(root, bx, by, bw, bh, &mut out);
     out
@@ -205,7 +209,11 @@ pub fn resolve_into<'r>(
     out: &mut Vec<Cell<'r>>,
 ) {
     match node {
-        Node::Cell { renderer, gen, on_press } => {
+        Node::Cell {
+            renderer,
+            gen,
+            on_press,
+        } => {
             out.push(Cell {
                 renderer: *renderer,
                 gen: Arc::clone(gen),
