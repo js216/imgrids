@@ -146,6 +146,11 @@ fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
     )
 }
 
+#[cfg(feature = "bpp32rgba")]
+fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
+    (p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF)
+}
+
 #[cfg(feature = "bpp16")]
 fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
     (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
@@ -154,6 +159,11 @@ fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
 #[cfg(feature = "bpp32")]
 fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
     ((r << 16) | (g << 8) | b) as Pixel
+}
+
+#[cfg(feature = "bpp32rgba")]
+fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    r | (g << 8) | (b << 16) | 0xFF000000
 }
 
 fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {

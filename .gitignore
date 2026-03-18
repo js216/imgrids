@@ -5,6 +5,7 @@
 *.font
 
 # directories
+.claude
 target
 
 # executables

@@ -1,58 +1,90 @@
-use super::sdl2::Sdl2Backend;
 use super::Backend;
 use crate::Pixel;
 
 extern "C" {
-    fn emscripten_sleep(ms: u32);
+    fn imgrids_blit(ptr: *const u8, byte_len: usize, width: u32, height: u32);
+    fn emscripten_set_main_loop_arg(
+        func: extern "C" fn(*mut libc::c_void),
+        arg: *mut libc::c_void,
+        fps: i32,
+        simulate_infinite_loop: i32,
+    );
 }
 
-pub struct WebBackend(Sdl2Backend);
+pub struct WebBackend {
+    pixels: Vec<Pixel>,
+    width: usize,
+    height: usize,
+}
 
 impl Backend for WebBackend {
     fn width(&self) -> usize {
-        self.0.width()
+        self.width
     }
     fn height(&self) -> usize {
-        self.0.height()
+        self.height
     }
 
     fn clear(&mut self, color: Pixel) {
-        self.0.clear(color)
+        self.pixels.fill(color);
     }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
-        self.0.fill_rect(x, y, w, h, color)
+        for row in y..y + h {
+            let start = row * self.width + x;
+            self.pixels[start..start + w].fill(color);
+        }
     }
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        self.0.render(draw_fn);
-        unsafe { emscripten_sleep(1) };
-    }
-
-    fn poll_quit(&mut self) -> bool {
-        self.0.poll_quit()
+        draw_fn(&mut self.pixels, self.width);
+        unsafe {
+            imgrids_blit(
+                self.pixels.as_ptr() as *const u8,
+                self.pixels.len() * std::mem::size_of::<Pixel>(),
+                self.width as u32,
+                self.height as u32,
+            );
+        }
     }
 }
 
 pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
-    let sdl = sdl2::init().expect("SDL2 init");
-    let video = sdl.video().expect("SDL2 video");
+    Box::new(WebBackend {
+        pixels: vec![0; w * h],
+        width: w,
+        height: h,
+    })
+}
 
-    // Force software rendering — no OpenGL/EGL needed for pixel blitting.
-    sdl2::hint::set("SDL_RENDER_DRIVER", "software");
+/// Hand the main loop to the browser's requestAnimationFrame.
+///
+/// `draw_fn` must be `'static` because it lives for the duration of the page.
+/// This function never returns.
+pub fn run(
+    backend: Box<dyn Backend>,
+    draw_fn: impl FnMut(&mut [Pixel], usize) + 'static,
+) -> ! {
+    struct State {
+        backend: Box<dyn Backend>,
+        draw_fn: Box<dyn FnMut(&mut [Pixel], usize)>,
+    }
 
-    let window = video
-        .window("imgrids demo", w as u32, h as u32)
-        .position_centered()
-        .build()
-        .expect("window");
-    let canvas = window
-        .into_canvas()
-        .software() // ← explicit software renderer
-        .build()
-        .expect("canvas");
-    let event_pump = sdl.event_pump().expect("event pump");
-    Box::new(WebBackend(
-        Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend"),
-    ))
+    extern "C" fn tick(arg: *mut libc::c_void) {
+        let s = unsafe { &mut *(arg as *mut State) };
+        // Split borrow: backend and draw_fn are separate fields.
+        let draw_fn = &mut *s.draw_fn as *mut dyn FnMut(&mut [Pixel], usize);
+        s.backend.render(unsafe { &mut *draw_fn });
+    }
+
+    let state = Box::into_raw(Box::new(State {
+        backend,
+        draw_fn: Box::new(draw_fn),
+    }));
+
+    unsafe {
+        emscripten_set_main_loop_arg(tick, state as *mut libc::c_void, 0, 1);
+    }
+
+    unreachable!()
 }

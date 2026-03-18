@@ -5,15 +5,19 @@ pub mod layout;
 // Bit depth
 ////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(all(feature = "bpp16", feature = "bpp32"))]
-compile_error!("bpp16 and bpp32 are mutually exclusive");
+#[cfg(any(
+    all(feature = "bpp16", feature = "bpp32"),
+    all(feature = "bpp16", feature = "bpp32rgba"),
+    all(feature = "bpp32", feature = "bpp32rgba"),
+))]
+compile_error!("only one of bpp16, bpp32, bpp32rgba may be selected");
 
-#[cfg(not(any(feature = "bpp16", feature = "bpp32")))]
-compile_error!("one of bpp16 or bpp32 must be selected");
+#[cfg(not(any(feature = "bpp16", feature = "bpp32", feature = "bpp32rgba")))]
+compile_error!("one of bpp16, bpp32, or bpp32rgba must be selected");
 
 #[cfg(feature = "bpp16")]
 pub type Pixel = u16;
-#[cfg(feature = "bpp32")]
+#[cfg(any(feature = "bpp32", feature = "bpp32rgba"))]
 pub type Pixel = u32;
 
 #[cfg(feature = "bpp16")]
@@ -29,6 +33,15 @@ macro_rules! rgb {
 macro_rules! rgb {
     ($r:expr, $g:expr, $b:expr) => {
         (($r as u32) << 16) | (($g as u32) << 8) | ($b as u32)
+    };
+}
+
+/// RGBA little-endian: bytes in memory are [R, G, B, 0xFF], matching canvas ImageData.
+#[cfg(feature = "bpp32rgba")]
+#[macro_export]
+macro_rules! rgb {
+    ($r:expr, $g:expr, $b:expr) => {
+        ($r as u32) | (($g as u32) << 8) | (($b as u32) << 16) | 0xFF000000u32
     };
 }
 

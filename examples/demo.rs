@@ -63,15 +63,15 @@ fn gen_random() -> &'static str {
 fn main() {
     let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
-    // Atlases
-    let ch1 = RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
-    let ch2 = RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
-    let ch3 = RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK);
-    let ch4 = RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK);
-    let ch5 = RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK);
-    let ch6 = RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK);
-    let ch7 = TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font");
-    let ch8 = TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font");
+    // Atlases — leaked so their 'static references satisfy web::run's bound.
+    let ch1 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK)));
+    let ch2 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK)));
+    let ch3 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK)));
+    let ch4 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK)));
+    let ch5 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK)));
+    let ch6 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK)));
+    let ch7 = &*Box::leak(Box::new(TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font")));
+    let ch8 = &*Box::leak(Box::new(TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font")));
 
     // Layout
     let layout = row(
@@ -116,17 +116,23 @@ fn main() {
 
     backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
 
+    #[cfg(target_os = "emscripten")]
+    imgrids::web::run(backend, move |pixels, stride| {
+        for c in &mut cells {
+            c.draw(pixels, stride);
+        }
+    });
+
+    #[cfg(not(target_os = "emscripten"))]
     loop {
         if backend.poll_quit() {
             break;
         }
-
         backend.render(&mut |pixels, stride| {
             for c in &mut cells {
                 c.draw(pixels, stride);
             }
         });
-
         std::thread::sleep(std::time::Duration::from_micros(33_333));
     }
 }

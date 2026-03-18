@@ -14,9 +14,10 @@ sdl2 = { version = "0.35", optional = true }
 [features]
 fb0 = []
 sdl = ["dep:sdl2"]
-web   = ["sdl"]
+web = []
 bpp16 = []
 bpp32 = []
+bpp32rgba = []
 
 [[example]]
 name = "demo"

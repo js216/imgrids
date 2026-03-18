@@ -147,7 +147,7 @@ impl<'r> Cell<'r> {
 /// layouts.  Use [`resolve_into`] with a pre-allocated Vec to avoid
 /// per-frame allocation.
 pub fn resolve<'r>(
-    root: &'r Node<'r>,
+    root: &Node<'r>,
     bx: usize,
     by: usize,
     bw: usize,
@@ -170,7 +170,7 @@ pub fn resolve<'r>(
 /// }
 /// ```
 pub fn resolve_into<'r>(
-    node: &'r Node<'r>,
+    node: &Node<'r>,
     bx: usize,
     by: usize,
     bw: usize,
@@ -201,7 +201,7 @@ pub fn resolve_into<'r>(
 }
 
 fn split_children<'r>(
-    children: &'r [Node<'r>],
+    children: &[Node<'r>],
     bx: usize,
     by: usize,
     bw: usize,
