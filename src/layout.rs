@@ -36,35 +36,38 @@ use std::sync::Arc;
 // --- Gen ---------------------------------------------------------------------
 
 /// A cheaply-clonable text generator closure.
-pub type Gen = Arc<dyn Fn() -> String + Send + Sync>;
+pub type Gen<'a> = Arc<dyn Fn() -> String + 'a>;
 
 /// A cheaply-clonable press-action closure.
-pub type Action = Arc<dyn Fn() + Send + Sync>;
+pub type Action<'a> = Arc<dyn Fn() + 'a>;
 
 // --- Node --------------------------------------------------------------------
 
 /// An element of the layout tree.
 ///
+/// `'r` is the lifetime of renderer references; `'g` is the lifetime of
+/// captured data in generator and action closures.
+///
 /// Build with the free functions [`cell`], [`button`], [`row`], [`col`].
-pub enum Node<'r> {
+pub enum Node<'r, 'g> {
     Cell {
         renderer: &'r dyn Renderer,
-        gen: Gen,
-        on_press: Option<Action>,
+        gen: Gen<'g>,
+        on_press: Option<Action<'g>>,
     },
     /// Splits its box **horizontally** (children side by side).
     Row {
         weight: u32,
-        children: Vec<Node<'r>>,
+        children: Vec<Node<'r, 'g>>,
     },
     /// Splits its box **vertically** (children stacked).
     Col {
         weight: u32,
-        children: Vec<Node<'r>>,
+        children: Vec<Node<'r, 'g>>,
     },
 }
 
-impl<'r> Node<'r> {
+impl<'r, 'g> Node<'r, 'g> {
     #[inline]
     pub fn weight(&self) -> u32 {
         match self {
@@ -78,9 +81,9 @@ impl<'r> Node<'r> {
 /// Display-only leaf node.
 ///
 /// `f` can be any `Fn() -> String` - a bare fn pointer works directly.
-pub fn cell<'r, F>(renderer: &'r dyn Renderer, f: F) -> Node<'r>
+pub fn cell<'r, 'g, F>(renderer: &'r dyn Renderer, f: F) -> Node<'r, 'g>
 where
-    F: Fn() -> String + Send + Sync + 'static,
+    F: Fn() -> String + 'g,
 {
     Node::Cell {
         renderer,
@@ -90,10 +93,10 @@ where
 }
 
 /// Interactive leaf node.  `action` is called when the cell is pressed.
-pub fn button<'r, F, A>(renderer: &'r dyn Renderer, f: F, action: A) -> Node<'r>
+pub fn button<'r, 'g, F, A>(renderer: &'r dyn Renderer, f: F, action: A) -> Node<'r, 'g>
 where
-    F: Fn() -> String + Send + Sync + 'static,
-    A: Fn() + Send + Sync + 'static,
+    F: Fn() -> String + 'g,
+    A: Fn() + 'g,
 {
     Node::Cell {
         renderer,
@@ -103,22 +106,22 @@ where
 }
 
 /// Splits its bounding box horizontally (children side by side).
-pub fn row(weight: u32, children: Vec<Node<'_>>) -> Node<'_> {
+pub fn row<'r, 'g>(weight: u32, children: Vec<Node<'r, 'g>>) -> Node<'r, 'g> {
     Node::Row { weight, children }
 }
 
 /// Splits its bounding box vertically (children stacked).
-pub fn col(weight: u32, children: Vec<Node<'_>>) -> Node<'_> {
+pub fn col<'r, 'g>(weight: u32, children: Vec<Node<'r, 'g>>) -> Node<'r, 'g> {
     Node::Col { weight, children }
 }
 
 // --- Cell (resolved leaf) ----------------------------------------------------
 
 /// A resolved, positioned leaf.  Stored in a flat `Vec<Cell>` after [`resolve`].
-pub struct Cell<'r> {
+pub struct Cell<'r, 'g> {
     pub renderer: &'r dyn Renderer,
-    pub gen: Gen,
-    pub on_press: Option<Action>,
+    pub gen: Gen<'g>,
+    pub on_press: Option<Action<'g>>,
     /// Bounding box left edge.
     pub x: usize,
     /// Bounding box top edge.
@@ -130,7 +133,7 @@ pub struct Cell<'r> {
     last: String,
 }
 
-impl<'r> Cell<'r> {
+impl<'r, 'g> Cell<'r, 'g> {
     /// Call the press action if one is set.
     #[inline]
     pub fn activate(&self) {
@@ -168,7 +171,7 @@ impl<'r> Cell<'r> {
 
 /// Return the index of the first cell whose bounding box contains `(x, y)`.
 #[inline]
-pub fn hit(cells: &[Cell], x: usize, y: usize) -> Option<usize> {
+pub fn hit(cells: &[Cell<'_, '_>], x: usize, y: usize) -> Option<usize> {
     cells
         .iter()
         .position(|c| x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h)
@@ -183,7 +186,13 @@ pub fn hit(cells: &[Cell], x: usize, y: usize) -> Option<usize> {
 /// Call once before the loop for a static layout, or every frame for dynamic
 /// layouts.  Use [`resolve_into`] with a pre-allocated Vec to avoid
 /// per-frame allocation.
-pub fn resolve<'r>(root: &Node<'r>, bx: usize, by: usize, bw: usize, bh: usize) -> Vec<Cell<'r>> {
+pub fn resolve<'r, 'g>(
+    root: &Node<'r, 'g>,
+    bx: usize,
+    by: usize,
+    bw: usize,
+    bh: usize,
+) -> Vec<Cell<'r, 'g>> {
     let mut out = Vec::new();
     resolve_into(root, bx, by, bw, bh, &mut out);
     out
@@ -200,13 +209,13 @@ pub fn resolve<'r>(root: &Node<'r>, bx: usize, by: usize, bw: usize, bh: usize) 
 ///     for c in &mut cells { c.draw(fb, stride); }
 /// }
 /// ```
-pub fn resolve_into<'r>(
-    node: &Node<'r>,
+pub fn resolve_into<'r, 'g>(
+    node: &Node<'r, 'g>,
     bx: usize,
     by: usize,
     bw: usize,
     bh: usize,
-    out: &mut Vec<Cell<'r>>,
+    out: &mut Vec<Cell<'r, 'g>>,
 ) {
     match node {
         Node::Cell {
@@ -236,14 +245,14 @@ pub fn resolve_into<'r>(
     }
 }
 
-fn split_children<'r>(
-    children: &[Node<'r>],
+fn split_children<'r, 'g>(
+    children: &[Node<'r, 'g>],
     bx: usize,
     by: usize,
     bw: usize,
     bh: usize,
     horizontal: bool,
-    out: &mut Vec<Cell<'r>>,
+    out: &mut Vec<Cell<'r, 'g>>,
 ) {
     if children.is_empty() {
         return;

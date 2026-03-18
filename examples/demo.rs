@@ -5,10 +5,7 @@ use imgrids::{
     ttf::TtfAtlas,
     InputEvent, Pixel,
 };
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Arc,
-};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
 use imgrids::fonts::font_terminus_8x16::FONT as FONT_TER;
@@ -63,10 +60,7 @@ fn gen_random() -> String {
 fn main() {
     let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
-    // Shared LED state - read by gen, written by action.
-    let led = Arc::new(AtomicBool::new(false));
-    let led_gen = Arc::clone(&led);
-    let led_action = Arc::clone(&led);
+    let led = AtomicBool::new(false);
 
     let ch1 = RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK);
     let ch2 = RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK);
@@ -86,15 +80,15 @@ fn main() {
                 vec![
                     button(
                         ch1.as_renderer(),
-                        move || {
-                            if led_gen.load(Relaxed) {
+                        || {
+                            if led.load(Relaxed) {
                                 "Turn LED off".to_string()
                             } else {
                                 "Turn LED on".to_string()
                             }
                         },
-                        move || {
-                            let was_on = led_action.fetch_xor(true, Relaxed);
+                        || {
+                            let was_on = led.fetch_xor(true, Relaxed);
                             println!("{}", if was_on { "LED off" } else { "LED on" });
                         },
                     ),
