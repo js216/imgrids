@@ -92,7 +92,10 @@ fn main() {
                     button(
                         ch1.as_renderer(),
                         move || if led_gen.load(Relaxed) { "Turn LED off" } else { "Turn LED on" },
-                        move || { led_action.fetch_xor(true, Relaxed); },
+                        move || {
+                        let was_on = led_action.fetch_xor(true, Relaxed);
+                        println!("{}", if was_on { "LED off" } else { "LED on" });
+                    },
                     ),
                     cell(ch2.as_renderer(), gen_world),
                     cell(ch3.as_renderer(), gen_random),
