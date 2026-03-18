@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+# Unix line endings
+if grep -rlP '\r' --include='*.rs' --include='*.js' --include='*.py' \
+    --include='*.md' --include='*.toml' --exclude-dir=target .; then
+    echo "CRLF line endings found (see above)"
+    exit 1
+fi
+
+# ASCII only
+if grep -rlP '[^\x00-\x7F]' --include='*.rs' --include='*.js' --include='*.py' \
+    --include='*.md' --include='*.toml' --exclude-dir=target .; then
+    echo "Non-ASCII characters found (see above)"
+    exit 1
+fi
+
+cargo fmt --check
+cargo check-all

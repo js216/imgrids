@@ -51,9 +51,9 @@ macro_rules! rgb {
 
 #[derive(Debug, Clone, Copy)]
 pub enum InputEvent {
-    Press   { x: u32, y: u32 },
+    Press { x: u32, y: u32 },
     Release { x: u32, y: u32 },
-    Move    { x: u32, y: u32 },
+    Move { x: u32, y: u32 },
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -51,7 +51,7 @@ fn gen_random() -> &'static str {
     s ^= s >> 7;
     s ^= s << 17;
     STATE.store(s, Ordering::Relaxed);
-    thread_local! { static BUF: std::cell::RefCell<[u8; 10]> = std::cell::RefCell::new([0u8; 10]); }
+    thread_local! { static BUF: std::cell::RefCell<[u8; 10]> = const { std::cell::RefCell::new([0u8; 10]) }; }
     BUF.with(|b| {
         let mut buf = b.borrow_mut();
         let mut v = s;
@@ -69,7 +69,7 @@ fn main() {
 
     // Shared LED state - read by gen, written by action.
     let led = Arc::new(AtomicBool::new(false));
-    let led_gen    = Arc::clone(&led);
+    let led_gen = Arc::clone(&led);
     let led_action = Arc::clone(&led);
 
     // Atlases - leaked so their 'static references satisfy web::run's bound.
@@ -79,8 +79,12 @@ fn main() {
     let ch4 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 32, 64, BLUE, BLACK)));
     let ch5 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 8, 16, WHITE, BLACK)));
     let ch6 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_8X8, 16, 32, RED, BLACK)));
-    let ch7 = &*Box::leak(Box::new(TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font")));
-    let ch8 = &*Box::leak(Box::new(TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font")));
+    let ch7 = &*Box::leak(Box::new(
+        TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, GREEN, BLACK).expect("font"),
+    ));
+    let ch8 = &*Box::leak(Box::new(
+        TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, GREEN, BLACK).expect("font"),
+    ));
 
     // Layout
     let layout = row(
@@ -91,11 +95,17 @@ fn main() {
                 vec![
                     button(
                         ch1.as_renderer(),
-                        move || if led_gen.load(Relaxed) { "Turn LED off" } else { "Turn LED on" },
                         move || {
-                        let was_on = led_action.fetch_xor(true, Relaxed);
-                        println!("{}", if was_on { "LED off" } else { "LED on" });
-                    },
+                            if led_gen.load(Relaxed) {
+                                "Turn LED off"
+                            } else {
+                                "Turn LED on"
+                            }
+                        },
+                        move || {
+                            let was_on = led_action.fetch_xor(true, Relaxed);
+                            println!("{}", if was_on { "LED off" } else { "LED on" });
+                        },
                     ),
                     cell(ch2.as_renderer(), gen_world),
                     cell(ch3.as_renderer(), gen_random),

@@ -91,14 +91,35 @@ impl Backend for Sdl2Backend {
         for event in self.event_pump.poll_iter() {
             match event {
                 sdl2::event::Event::Quit { .. } => self.quit = true,
-                sdl2::event::Event::MouseButtonDown { x, y, mouse_btn: sdl2::mouse::MouseButton::Left, .. } => {
-                    self.events.push(InputEvent::Press { x: x as u32, y: y as u32 });
+                sdl2::event::Event::MouseButtonDown {
+                    x,
+                    y,
+                    mouse_btn: sdl2::mouse::MouseButton::Left,
+                    ..
+                } => {
+                    self.events.push(InputEvent::Press {
+                        x: x as u32,
+                        y: y as u32,
+                    });
                 }
-                sdl2::event::Event::MouseButtonUp { x, y, mouse_btn: sdl2::mouse::MouseButton::Left, .. } => {
-                    self.events.push(InputEvent::Release { x: x as u32, y: y as u32 });
+                sdl2::event::Event::MouseButtonUp {
+                    x,
+                    y,
+                    mouse_btn: sdl2::mouse::MouseButton::Left,
+                    ..
+                } => {
+                    self.events.push(InputEvent::Release {
+                        x: x as u32,
+                        y: y as u32,
+                    });
                 }
-                sdl2::event::Event::MouseMotion { x, y, mousestate, .. } if mousestate.left() => {
-                    self.events.push(InputEvent::Move { x: x as u32, y: y as u32 });
+                sdl2::event::Event::MouseMotion {
+                    x, y, mousestate, ..
+                } if mousestate.left() => {
+                    self.events.push(InputEvent::Move {
+                        x: x as u32,
+                        y: y as u32,
+                    });
                 }
                 _ => {}
             }

@@ -21,10 +21,16 @@ pub struct WebBackend {
 }
 
 impl Backend for WebBackend {
-    fn width(&self) -> usize { self.width }
-    fn height(&self) -> usize { self.height }
+    fn width(&self) -> usize {
+        self.width
+    }
+    fn height(&self) -> usize {
+        self.height
+    }
 
-    fn clear(&mut self, color: Pixel) { self.pixels.fill(color); }
+    fn clear(&mut self, color: Pixel) {
+        self.pixels.fill(color);
+    }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
         for row in y..y + h {
@@ -53,9 +59,18 @@ impl Backend for WebBackend {
                 break;
             }
             let ev = match t {
-                0 => InputEvent::Press   { x: x as u32, y: y as u32 },
-                1 => InputEvent::Release { x: x as u32, y: y as u32 },
-                2 => InputEvent::Move    { x: x as u32, y: y as u32 },
+                0 => InputEvent::Press {
+                    x: x as u32,
+                    y: y as u32,
+                },
+                1 => InputEvent::Release {
+                    x: x as u32,
+                    y: y as u32,
+                },
+                2 => InputEvent::Move {
+                    x: x as u32,
+                    y: y as u32,
+                },
                 _ => continue,
             };
             self.events.push(ev);
@@ -78,10 +93,7 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
 /// `tick_fn` receives a `&mut dyn Backend` each frame so it can call
 /// `poll_events`, then `render`.  It must be `'static` because it lives for
 /// the duration of the page.  This function never returns.
-pub fn run(
-    backend: Box<dyn Backend>,
-    tick_fn: impl FnMut(&mut dyn Backend) + 'static,
-) -> ! {
+pub fn run(backend: Box<dyn Backend>, tick_fn: impl FnMut(&mut dyn Backend) + 'static) -> ! {
     struct State {
         backend: Box<dyn Backend>,
         tick_fn: Box<dyn FnMut(&mut dyn Backend)>,

@@ -43,7 +43,7 @@ impl TtfAtlas {
         let mut buf = vec![bg; total];
         let mut ptr = 0usize;
 
-        let (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b) = channels(fg, bg);
+        let (fg_rgb, bg_rgb) = channels(fg, bg);
 
         for code in 0u8..128 {
             let gw = adv[code as usize];
@@ -63,16 +63,7 @@ impl TtfAtlas {
                 rasterise_alpha(&outlined, &mut alpha, gw, cell_h);
             }
 
-            blend_into(
-                &mut buf[ptr..ptr + n],
-                &alpha,
-                fg_r,
-                fg_g,
-                fg_b,
-                bg_r,
-                bg_g,
-                bg_b,
-            );
+            blend_into(&mut buf[ptr..ptr + n], &alpha, fg_rgb, bg_rgb);
             ptr += n;
         }
 
@@ -166,10 +157,8 @@ fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
     r | (g << 8) | (b << 16) | 0xFF000000
 }
 
-fn channels(fg: Pixel, bg: Pixel) -> (u32, u32, u32, u32, u32, u32) {
-    let (fg_r, fg_g, fg_b) = to_rgb888(fg);
-    let (bg_r, bg_g, bg_b) = to_rgb888(bg);
-    (fg_r, fg_g, fg_b, bg_r, bg_g, bg_b)
+fn channels(fg: Pixel, bg: Pixel) -> ((u32, u32, u32), (u32, u32, u32)) {
+    (to_rgb888(fg), to_rgb888(bg))
 }
 
 fn rasterise_alpha(
@@ -188,22 +177,13 @@ fn rasterise_alpha(
     });
 }
 
-fn blend_into(
-    dst: &mut [Pixel],
-    alpha: &[u8],
-    fg_r: u32,
-    fg_g: u32,
-    fg_b: u32,
-    bg_r: u32,
-    bg_g: u32,
-    bg_b: u32,
-) {
+fn blend_into(dst: &mut [Pixel], alpha: &[u8], fg: (u32, u32, u32), bg: (u32, u32, u32)) {
     for (d, &a) in dst.iter_mut().zip(alpha.iter()) {
         let a = a as u32;
         let inv = 255 - a;
-        let r = (fg_r * a + bg_r * inv) / 255;
-        let g = (fg_g * a + bg_g * inv) / 255;
-        let b = (fg_b * a + bg_b * inv) / 255;
+        let r = (fg.0 * a + bg.0 * inv) / 255;
+        let g = (fg.1 * a + bg.1 * inv) / 255;
+        let b = (fg.2 * a + bg.2 * inv) / 255;
         *d = rgb888_to_pixel(r, g, b);
     }
 }
