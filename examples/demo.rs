@@ -20,7 +20,7 @@ const RED: Pixel = rgb!(255, 0, 0);
 const GREEN: Pixel = rgb!(0, 255, 0);
 const BLUE: Pixel = rgb!(0, 0, 255);
 
-// ─── Geometry ────────────────────────────────────────────────────────────────
+// --- Geometry ----------------------------------------------------------------
 
 const SCREEN_W: usize = 800;
 const SCREEN_H: usize = 480;
@@ -34,7 +34,7 @@ const MARGIN_X: usize = 20;
 const MARGIN_Y: usize = 20;
 const BORDER: usize = 4;
 
-// ─── Text generators ─────────────────────────────────────────────────────────
+// --- Text generators ---------------------------------------------------------
 
 fn gen_hello() -> &'static str {
     "Hello!    "
@@ -67,12 +67,12 @@ fn gen_random() -> &'static str {
 fn main() {
     let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
-    // Shared LED state — read by gen, written by action.
+    // Shared LED state - read by gen, written by action.
     let led = Arc::new(AtomicBool::new(false));
     let led_gen    = Arc::clone(&led);
     let led_action = Arc::clone(&led);
 
-    // Atlases — leaked so their 'static references satisfy web::run's bound.
+    // Atlases - leaked so their 'static references satisfy web::run's bound.
     let ch1 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK)));
     let ch2 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK)));
     let ch3 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_TER, 16, 32, GREEN, BLACK)));

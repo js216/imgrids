@@ -12,7 +12,7 @@
 //       ]),
 //   ]);
 //
-//   // Resolve once before the loop — or inside the loop for dynamic layouts.
+//   // Resolve once before the loop - or inside the loop for dynamic layouts.
 //   let mut cells = resolve(&layout, x, y, w, h);
 //
 //   loop {
@@ -21,19 +21,19 @@
 //
 // ## Design
 //
-// * `Node` is a plain enum — no allocation during construction beyond the
+// * `Node` is a plain enum - no allocation during construction beyond the
 //   child Vec and the Arc-wrapped gen closure.
 // * `resolve` / `resolve_into` walk the tree and write a flat `Vec<Cell>`.
 //   No further tree access after that.
 // * `Cell::draw` is a dirty-check + one call to `Renderer::draw`; the check
 //   is a pointer comparison (same static str address) so it costs ~1 ns.
-// * Arc overhead is reference-count bumps at resolve time only — never
+// * Arc overhead is reference-count bumps at resolve time only - never
 //   during the render loop.
 
 use crate::{Pixel, Renderer};
 use std::sync::Arc;
 
-// ─── Gen ─────────────────────────────────────────────────────────────────────
+// --- Gen ---------------------------------------------------------------------
 
 /// A cheaply-clonable text generator closure.
 pub type Gen = Arc<dyn Fn() -> &'static str + Send + Sync>;
@@ -41,7 +41,7 @@ pub type Gen = Arc<dyn Fn() -> &'static str + Send + Sync>;
 /// A cheaply-clonable press-action closure.
 pub type Action = Arc<dyn Fn() + Send + Sync>;
 
-// ─── Node ────────────────────────────────────────────────────────────────────
+// --- Node --------------------------------------------------------------------
 
 /// An element of the layout tree.
 ///
@@ -77,7 +77,7 @@ impl<'r> Node<'r> {
 
 /// Display-only leaf node.
 ///
-/// `f` can be any `Fn() -> &'static str` — a bare fn pointer works directly.
+/// `f` can be any `Fn() -> &'static str` - a bare fn pointer works directly.
 pub fn cell<'r, F>(renderer: &'r dyn Renderer, f: F) -> Node<'r>
 where
     F: Fn() -> &'static str + Send + Sync + 'static,
@@ -104,7 +104,7 @@ pub fn col(weight: u32, children: Vec<Node<'_>>) -> Node<'_> {
     Node::Col { weight, children }
 }
 
-// ─── Cell (resolved leaf) ────────────────────────────────────────────────────
+// --- Cell (resolved leaf) ----------------------------------------------------
 
 /// A resolved, positioned leaf.  Stored in a flat `Vec<Cell>` after [`resolve`].
 pub struct Cell<'r> {
@@ -147,7 +147,7 @@ impl<'r> Cell<'r> {
         true
     }
 
-    /// Unconditional draw — call after blanking the framebuffer.
+    /// Unconditional draw - call after blanking the framebuffer.
     #[inline]
     pub fn force_draw(&mut self, fb: &mut [Pixel], stride: usize) {
         let text = (self.gen)();
@@ -164,7 +164,7 @@ pub fn hit(cells: &[Cell], x: usize, y: usize) -> Option<usize> {
         .position(|c| x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h)
 }
 
-// ─── resolve ─────────────────────────────────────────────────────────────────
+// --- resolve -----------------------------------------------------------------
 
 /// Walk `root` and return a flat `Vec<Cell>` with pre-computed screen positions.
 ///

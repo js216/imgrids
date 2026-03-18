@@ -4,7 +4,7 @@ use std::mem::size_of;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 
-// ─── /dev/input/eventN constants ─────────────────────────────────────────────
+// --- /dev/input/eventN constants ---------------------------------------------
 
 /// `input_event` layout on 32-bit ARM Linux.
 #[repr(C)]
@@ -39,7 +39,7 @@ impl TouchState {
     }
 }
 
-// ─── Framebuffer constants ────────────────────────────────────────────────────
+// --- Framebuffer constants ----------------------------------------------------
 
 const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
 const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
@@ -92,7 +92,7 @@ struct FbFixScreenInfo {
 }
 
 pub struct Framebuf {
-    /// Direct alias into the mmap — Pixel is the native hardware type (u16 RGB565).
+    /// Direct alias into the mmap - Pixel is the native hardware type (u16 RGB565).
     /// stride accounts for hardware line padding; always use it for row offsets.
     pub pixels: &'static mut [Pixel],
     pub stride: usize,
@@ -133,7 +133,7 @@ impl Framebuf {
         let pixel_bytes = std::mem::size_of::<Pixel>();
         if bpp != pixel_bytes * 8 {
             return Err(format!(
-                "framebuffer is {bpp}bpp but Pixel is {}bpp — recompile or run: fbset -depth {}",
+                "framebuffer is {bpp}bpp but Pixel is {}bpp - recompile or run: fbset -depth {}",
                 pixel_bytes * 8,
                 pixel_bytes * 8,
             ));

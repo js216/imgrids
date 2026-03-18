@@ -2,13 +2,13 @@ use crate::{Pixel, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
 
-// ─── Atlas (baked pixels for one size+colour combination) ────────────────────
+// --- Atlas (baked pixels for one size+colour combination) --------------------
 
 pub struct TtfAtlas {
     cell_h: usize,
     /// Per-glyph advance width in pixels; 0 = no glyph
     adv: [usize; 128],
-    /// Flat buffer of all glyph bitmaps concatenated (variable width × cell_h)
+    /// Flat buffer of all glyph bitmaps concatenated (variable width x cell_h)
     buf: Vec<Pixel>,
     /// Index into buf for each glyph
     offsets: [usize; 128],
@@ -126,7 +126,7 @@ impl Renderer for TtfAtlas {
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// --- Helpers -----------------------------------------------------------------
 
 #[cfg(feature = "bpp16")]
 fn to_rgb888(p: Pixel) -> (u32, u32, u32) {

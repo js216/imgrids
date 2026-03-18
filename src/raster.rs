@@ -1,4 +1,4 @@
-// Bitmap font renderer — scales any embedded font to any cell size using
+// Bitmap font renderer - scales any embedded font to any cell size using
 // nearest-neighbour sampling, baking fg/bg at init time.
 
 use crate::{Pixel, Renderer};
