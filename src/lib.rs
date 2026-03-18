@@ -46,6 +46,17 @@ macro_rules! rgb {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Input
+////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, Clone, Copy)]
+pub enum InputEvent {
+    Press   { x: u32, y: u32 },
+    Release { x: u32, y: u32 },
+    Move    { x: u32, y: u32 },
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Renderers
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,6 +100,12 @@ pub trait Backend {
 
     /// Locks the pixel buffer, calls `draw_fn(pixels, stride)`, then presents.
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize));
+
+    /// Drains pending input events into an internal buffer and returns them.
+    /// Returns an empty slice on backends that have no input device.
+    fn poll_events(&mut self) -> &[InputEvent] {
+        &[]
+    }
 
     /// Returns `true` when a quit event is pending. Defaults to `false`.
     fn poll_quit(&mut self) -> bool {

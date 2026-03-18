@@ -1,8 +1,10 @@
 use super::Backend;
-use crate::Pixel;
+use crate::{InputEvent, Pixel};
 
 extern "C" {
     fn imgrids_blit(ptr: *const u8, byte_len: usize, width: u32, height: u32);
+    fn imgrids_setup_input();
+    fn imgrids_next_event(out_type: *mut i32, out_x: *mut i32, out_y: *mut i32) -> i32;
     fn emscripten_set_main_loop_arg(
         func: extern "C" fn(*mut libc::c_void),
         arg: *mut libc::c_void,
@@ -15,19 +17,14 @@ pub struct WebBackend {
     pixels: Vec<Pixel>,
     width: usize,
     height: usize,
+    events: Vec<InputEvent>,
 }
 
 impl Backend for WebBackend {
-    fn width(&self) -> usize {
-        self.width
-    }
-    fn height(&self) -> usize {
-        self.height
-    }
+    fn width(&self) -> usize { self.width }
+    fn height(&self) -> usize { self.height }
 
-    fn clear(&mut self, color: Pixel) {
-        self.pixels.fill(color);
-    }
+    fn clear(&mut self, color: Pixel) { self.pixels.fill(color); }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
         for row in y..y + h {
@@ -47,6 +44,24 @@ impl Backend for WebBackend {
             );
         }
     }
+
+    fn poll_events(&mut self) -> &[InputEvent] {
+        self.events.clear();
+        loop {
+            let (mut t, mut x, mut y) = (0i32, 0i32, 0i32);
+            if unsafe { imgrids_next_event(&mut t, &mut x, &mut y) } == 0 {
+                break;
+            }
+            let ev = match t {
+                0 => InputEvent::Press   { x: x as u32, y: y as u32 },
+                1 => InputEvent::Release { x: x as u32, y: y as u32 },
+                2 => InputEvent::Move    { x: x as u32, y: y as u32 },
+                _ => continue,
+            };
+            self.events.push(ev);
+        }
+        &self.events
+    }
 }
 
 pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
@@ -54,35 +69,36 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
         pixels: vec![0; w * h],
         width: w,
         height: h,
+        events: Vec::new(),
     })
 }
 
 /// Hand the main loop to the browser's requestAnimationFrame.
 ///
-/// `draw_fn` must be `'static` because it lives for the duration of the page.
-/// This function never returns.
+/// `tick_fn` receives a `&mut dyn Backend` each frame so it can call
+/// `poll_events`, then `render`.  It must be `'static` because it lives for
+/// the duration of the page.  This function never returns.
 pub fn run(
     backend: Box<dyn Backend>,
-    draw_fn: impl FnMut(&mut [Pixel], usize) + 'static,
+    tick_fn: impl FnMut(&mut dyn Backend) + 'static,
 ) -> ! {
     struct State {
         backend: Box<dyn Backend>,
-        draw_fn: Box<dyn FnMut(&mut [Pixel], usize)>,
+        tick_fn: Box<dyn FnMut(&mut dyn Backend)>,
     }
 
     extern "C" fn tick(arg: *mut libc::c_void) {
         let s = unsafe { &mut *(arg as *mut State) };
-        // Split borrow: backend and draw_fn are separate fields.
-        let draw_fn = &mut *s.draw_fn as *mut dyn FnMut(&mut [Pixel], usize);
-        s.backend.render(unsafe { &mut *draw_fn });
+        (s.tick_fn)(&mut *s.backend);
     }
 
     let state = Box::into_raw(Box::new(State {
         backend,
-        draw_fn: Box::new(draw_fn),
+        tick_fn: Box::new(tick_fn),
     }));
 
     unsafe {
+        imgrids_setup_input();
         emscripten_set_main_loop_arg(tick, state as *mut libc::c_void, 0, 1);
     }
 

@@ -38,15 +38,19 @@ use std::sync::Arc;
 /// A cheaply-clonable text generator closure.
 pub type Gen = Arc<dyn Fn() -> &'static str + Send + Sync>;
 
+/// A cheaply-clonable press-action closure.
+pub type Action = Arc<dyn Fn() + Send + Sync>;
+
 // ─── Node ────────────────────────────────────────────────────────────────────
 
 /// An element of the layout tree.
 ///
-/// Build with the free functions [`cell`], [`row`], [`col`].
+/// Build with the free functions [`cell`], [`button`], [`row`], [`col`].
 pub enum Node<'r> {
     Cell {
         renderer: &'r dyn Renderer,
         gen: Gen,
+        on_press: Option<Action>,
     },
     /// Splits its box **horizontally** (children side by side).
     Row {
@@ -64,24 +68,30 @@ impl<'r> Node<'r> {
     #[inline]
     pub fn weight(&self) -> u32 {
         match self {
-            Node::Cell { .. } => 1,
+            Node::Cell { .. }  => 1,
             Node::Row { weight, .. } => *weight,
             Node::Col { weight, .. } => *weight,
         }
     }
 }
 
-/// Leaf node — renderer + text generator.
+/// Display-only leaf node.
 ///
 /// `f` can be any `Fn() -> &'static str` — a bare fn pointer works directly.
 pub fn cell<'r, F>(renderer: &'r dyn Renderer, f: F) -> Node<'r>
 where
     F: Fn() -> &'static str + Send + Sync + 'static,
 {
-    Node::Cell {
-        renderer,
-        gen: Arc::new(f),
-    }
+    Node::Cell { renderer, gen: Arc::new(f), on_press: None }
+}
+
+/// Interactive leaf node.  `action` is called when the cell is pressed.
+pub fn button<'r, F, A>(renderer: &'r dyn Renderer, f: F, action: A) -> Node<'r>
+where
+    F: Fn() -> &'static str + Send + Sync + 'static,
+    A: Fn() + Send + Sync + 'static,
+{
+    Node::Cell { renderer, gen: Arc::new(f), on_press: Some(Arc::new(action)) }
 }
 
 /// Splits its bounding box horizontally (children side by side).
@@ -100,28 +110,40 @@ pub fn col(weight: u32, children: Vec<Node<'_>>) -> Node<'_> {
 pub struct Cell<'r> {
     pub renderer: &'r dyn Renderer,
     pub gen: Gen,
+    pub on_press: Option<Action>,
+    /// Bounding box left edge.
     pub x: usize,
+    /// Bounding box top edge.
     pub y: usize,
+    /// Bounding box width.
+    pub w: usize,
+    /// Bounding box height.
+    pub h: usize,
     last: String,
 }
 
 impl<'r> Cell<'r> {
+    /// Call the press action if one is set.
+    #[inline]
+    pub fn activate(&self) {
+        if let Some(action) = &self.on_press { action(); }
+    }
+
+    #[inline]
+    fn text_y(&self) -> usize {
+        self.y + (self.h / 2).saturating_sub(self.renderer.cell_height() / 2)
+    }
+
     /// Draw this cell.  Returns `true` if the framebuffer was modified (text
     /// changed since last call).  Use [`force_draw`] after clearing the screen.
     #[inline]
     pub fn draw(&mut self, fb: &mut [Pixel], stride: usize) -> bool {
         let text = (self.gen)();
-
-        // 1. Compare the current content with our stored String
         if text == self.last {
             return false;
         }
-
-        // 2. Fix E0308: Convert the &str to a String to store it
         self.last = text.to_string();
-
-        // 3. Draw to the framebuffer
-        self.renderer.draw(fb, stride, self.x, self.y, text);
+        self.renderer.draw(fb, stride, self.x, self.text_y(), text);
         true
     }
 
@@ -129,12 +151,17 @@ impl<'r> Cell<'r> {
     #[inline]
     pub fn force_draw(&mut self, fb: &mut [Pixel], stride: usize) {
         let text = (self.gen)();
-
-        // FIX: Convert the &str reference into an owned String
         self.last = text.to_string();
-
-        self.renderer.draw(fb, stride, self.x, self.y, text);
+        self.renderer.draw(fb, stride, self.x, self.text_y(), text);
     }
+}
+
+/// Return the index of the first cell whose bounding box contains `(x, y)`.
+#[inline]
+pub fn hit(cells: &[Cell], x: usize, y: usize) -> Option<usize> {
+    cells
+        .iter()
+        .position(|c| x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h)
 }
 
 // ─── resolve ─────────────────────────────────────────────────────────────────
@@ -178,15 +205,16 @@ pub fn resolve_into<'r>(
     out: &mut Vec<Cell<'r>>,
 ) {
     match node {
-        Node::Cell { renderer, gen } => {
-            let ch = renderer.cell_height();
-            let y = by + (bh / 2).saturating_sub(ch / 2);
+        Node::Cell { renderer, gen, on_press } => {
             out.push(Cell {
                 renderer: *renderer,
                 gen: Arc::clone(gen),
+                on_press: on_press.clone(),
                 x: bx,
-                y,
-                last: String::new(), // Changed from ""
+                y: by,
+                w: bw,
+                h: bh,
+                last: String::new(),
             });
         }
 

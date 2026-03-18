@@ -1,8 +1,45 @@
-use crate::Backend;
-use crate::Pixel;
+use crate::{Backend, InputEvent, Pixel};
 use std::fs::OpenOptions;
+use std::mem::size_of;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
+
+// ─── /dev/input/eventN constants ─────────────────────────────────────────────
+
+/// `input_event` layout on 32-bit ARM Linux.
+#[repr(C)]
+struct RawInputEvent {
+    tv_sec:  i32,
+    tv_usec: i32,
+    type_:   u16,
+    code:    u16,
+    value:   i32,
+}
+
+const EV_SYN: u16 = 0;
+const EV_KEY: u16 = 1;
+const EV_ABS: u16 = 3;
+const SYN_REPORT: u16 = 0;
+const BTN_TOUCH: u16 = 0x14a;
+const ABS_X: u16 = 0;
+const ABS_Y: u16 = 1;
+
+struct TouchState {
+    x: i32,
+    y: i32,
+    down: bool,
+    prev_x: i32,
+    prev_y: i32,
+    prev_down: bool,
+}
+
+impl TouchState {
+    const fn new() -> Self {
+        Self { x: 0, y: 0, down: false, prev_x: 0, prev_y: 0, prev_down: false }
+    }
+}
+
+// ─── Framebuffer constants ────────────────────────────────────────────────────
 
 const FBIOGET_VSCREENINFO: libc::c_ulong = 0x4600;
 const FBIOGET_FSCREENINFO: libc::c_ulong = 0x4602;
@@ -64,6 +101,9 @@ pub struct Framebuf {
     fd: i32,
     mmap_ptr: *mut libc::c_void,
     mmap_size: usize,
+    input_fd: Option<i32>,
+    touch: TouchState,
+    events: Vec<InputEvent>,
 }
 
 impl Framebuf {
@@ -122,6 +162,12 @@ impl Framebuf {
             std::slice::from_raw_parts_mut(mmap_ptr as *mut Pixel, mmap_size / pixel_bytes)
         };
 
+        let input_fd = unsafe {
+            let path = b"/dev/input/event0\0";
+            let ifd = libc::open(path.as_ptr() as *const libc::c_char, libc::O_RDONLY | libc::O_NONBLOCK);
+            if ifd < 0 { None } else { Some(ifd) }
+        };
+
         Ok(Framebuf {
             pixels,
             stride,
@@ -130,6 +176,9 @@ impl Framebuf {
             fd,
             mmap_ptr,
             mmap_size,
+            input_fd,
+            touch: TouchState::new(),
+            events: Vec::new(),
         })
     }
 }
@@ -157,11 +206,52 @@ impl Backend for Framebuf {
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
         draw_fn(self.pixels, self.stride);
     }
+
+    fn poll_events(&mut self) -> &[InputEvent] {
+        self.events.clear();
+        let fd = match self.input_fd {
+            Some(fd) => fd,
+            None => return &[],
+        };
+        loop {
+            let mut raw = RawInputEvent { tv_sec: 0, tv_usec: 0, type_: 0, code: 0, value: 0 };
+            let n = unsafe {
+                libc::read(fd, &mut raw as *mut RawInputEvent as *mut libc::c_void, size_of::<RawInputEvent>())
+            };
+            if n < size_of::<RawInputEvent>() as isize {
+                break; // EAGAIN or short read
+            }
+            match (raw.type_, raw.code) {
+                (EV_ABS, ABS_X)          => self.touch.x = raw.value,
+                (EV_ABS, ABS_Y)          => self.touch.y = raw.value,
+                (EV_KEY, BTN_TOUCH)      => self.touch.down = raw.value != 0,
+                (EV_SYN, SYN_REPORT)     => {
+                    let x = self.touch.x as u32;
+                    let y = self.touch.y as u32;
+                    let ev = match (self.touch.down, self.touch.prev_down) {
+                        (true,  false) => Some(InputEvent::Press   { x, y }),
+                        (false, true)  => Some(InputEvent::Release { x, y }),
+                        (true,  true) if self.touch.x != self.touch.prev_x
+                                      || self.touch.y != self.touch.prev_y
+                                     => Some(InputEvent::Move { x, y }),
+                        _ => None,
+                    };
+                    if let Some(e) = ev { self.events.push(e); }
+                    self.touch.prev_down = self.touch.down;
+                    self.touch.prev_x    = self.touch.x;
+                    self.touch.prev_y    = self.touch.y;
+                }
+                _ => {}
+            }
+        }
+        &self.events
+    }
 }
 
 impl Drop for Framebuf {
     fn drop(&mut self) {
         unsafe {
+            if let Some(ifd) = self.input_fd { libc::close(ifd); }
             libc::ioctl(self.fd, FBIOBLANK, FB_BLANK_POWERDOWN);
             libc::munmap(self.mmap_ptr, self.mmap_size);
             libc::close(self.fd);

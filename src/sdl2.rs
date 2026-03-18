@@ -1,5 +1,4 @@
-use crate::Backend;
-use crate::Pixel;
+use crate::{Backend, InputEvent, Pixel};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
@@ -13,6 +12,8 @@ pub struct Sdl2Backend {
     pub height: usize,
     // Owns the creator so that the texture lifetime is self-contained.
     _creator: Box<TextureCreator<WindowContext>>,
+    events: Vec<InputEvent>,
+    quit: bool,
 }
 
 impl Sdl2Backend {
@@ -38,6 +39,8 @@ impl Sdl2Backend {
             width: width as usize,
             height: height as usize,
             _creator: creator,
+            events: Vec::new(),
+            quit: false,
         })
     }
 }
@@ -82,13 +85,29 @@ impl Backend for Sdl2Backend {
         self.canvas.present();
     }
 
-    fn poll_quit(&mut self) -> bool {
+    fn poll_events(&mut self) -> &[InputEvent] {
+        self.events.clear();
+        self.quit = false;
         for event in self.event_pump.poll_iter() {
-            if let sdl2::event::Event::Quit { .. } = event {
-                return true;
+            match event {
+                sdl2::event::Event::Quit { .. } => self.quit = true,
+                sdl2::event::Event::MouseButtonDown { x, y, mouse_btn: sdl2::mouse::MouseButton::Left, .. } => {
+                    self.events.push(InputEvent::Press { x: x as u32, y: y as u32 });
+                }
+                sdl2::event::Event::MouseButtonUp { x, y, mouse_btn: sdl2::mouse::MouseButton::Left, .. } => {
+                    self.events.push(InputEvent::Release { x: x as u32, y: y as u32 });
+                }
+                sdl2::event::Event::MouseMotion { x, y, mousestate, .. } if mousestate.left() => {
+                    self.events.push(InputEvent::Move { x: x as u32, y: y as u32 });
+                }
+                _ => {}
             }
         }
-        false
+        &self.events
+    }
+
+    fn poll_quit(&mut self) -> bool {
+        self.quit
     }
 }
 

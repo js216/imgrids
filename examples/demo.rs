@@ -1,9 +1,13 @@
 use imgrids::{
-    layout::{cell, col, resolve, row},
+    layout::{button, cell, col, resolve, row},
     raster::RasterAtlas,
     rgb,
     ttf::TtfAtlas,
-    Pixel,
+    InputEvent, Pixel,
+};
+use std::sync::{
+    atomic::{AtomicBool, Ordering::Relaxed},
+    Arc,
 };
 
 use imgrids::fonts::font8x8::FONT as FONT_8X8;
@@ -63,6 +67,11 @@ fn gen_random() -> &'static str {
 fn main() {
     let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
+    // Shared LED state — read by gen, written by action.
+    let led = Arc::new(AtomicBool::new(false));
+    let led_gen    = Arc::clone(&led);
+    let led_action = Arc::clone(&led);
+
     // Atlases — leaked so their 'static references satisfy web::run's bound.
     let ch1 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 16, 32, WHITE, BLACK)));
     let ch2 = &*Box::leak(Box::new(RasterAtlas::new(&FONT_VGA, 32, 64, RED, BLACK)));
@@ -80,7 +89,11 @@ fn main() {
             col(
                 1,
                 vec![
-                    cell(ch1.as_renderer(), gen_hello),
+                    button(
+                        ch1.as_renderer(),
+                        move || if led_gen.load(Relaxed) { "Turn LED off" } else { "Turn LED on" },
+                        move || { led_action.fetch_xor(true, Relaxed); },
+                    ),
                     cell(ch2.as_renderer(), gen_world),
                     cell(ch3.as_renderer(), gen_random),
                     cell(ch4.as_renderer(), gen_random),
@@ -117,14 +130,30 @@ fn main() {
     backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
 
     #[cfg(target_os = "emscripten")]
-    imgrids::web::run(backend, move |pixels, stride| {
-        for c in &mut cells {
-            c.draw(pixels, stride);
+    imgrids::web::run(backend, move |backend| {
+        for ev in backend.poll_events() {
+            if let InputEvent::Press { x, y } = *ev {
+                if let Some(i) = imgrids::layout::hit(&cells, x as usize, y as usize) {
+                    cells[i].activate();
+                }
+            }
         }
+        backend.render(&mut |pixels, stride| {
+            for c in &mut cells {
+                c.draw(pixels, stride);
+            }
+        });
     });
 
     #[cfg(not(target_os = "emscripten"))]
     loop {
+        for ev in backend.poll_events() {
+            if let InputEvent::Press { x, y } = *ev {
+                if let Some(i) = imgrids::layout::hit(&cells, x as usize, y as usize) {
+                    cells[i].activate();
+                }
+            }
+        }
         if backend.poll_quit() {
             break;
         }
