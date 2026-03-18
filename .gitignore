@@ -7,10 +7,3 @@
 # directories
 .claude
 target
-
-# executables
-demo
-chars
-mono
-shapes
-tt
