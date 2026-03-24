@@ -1,5 +1,6 @@
 use imgrids::fonts::font_vga16::FONT;
 use imgrids::raster::RasterAtlas;
+use imgrids::ttf::TtfAtlas;
 use imgrids::{rgb, InputEvent, Renderer};
 
 const WHITE: (u8, u8, u8) = (255, 255, 255);
@@ -8,12 +9,16 @@ const BLUE:  (u8, u8, u8) = (0, 0, 200);
 
 fn main() {
     let mut backend = imgrids::init(800, 480);
+
     let font = RasterAtlas::new(&FONT, 16, 32, rgb!(WHITE), rgb!(BLACK));
+    let ttf = TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, rgb!(WHITE), rgb!(BLACK))
+        .expect("MyriadPro-Regular.ttf");
 
     let mut x0 = 0;
     let mut y0 = 0;
 
-    font.draw(&mut backend, 100, 100, "Hello!");
+    font.draw(&mut backend, 100, 100, "Hello,");
+    ttf.draw(&mut backend, 100, 132, "world!");
 
     loop {
         for ev in backend.poll_events().iter().copied() {
