@@ -17,8 +17,10 @@ fn main() {
     let mut x0 = 0;
     let mut y0 = 0;
 
-    font.draw(&mut backend, 100, 100, "Hello,");
-    ttf.draw(&mut backend, 100, 132, "world!");
+    backend.render(&mut |fb, stride| {
+        font.blit(fb, stride, 100, 100, "Hello,");
+        ttf.blit(fb, stride, 100, 132, "world!");
+    });
 
     loop {
         for ev in backend.poll_events().iter().copied() {

@@ -1,7 +1,7 @@
 // Bitmap font renderer - scales any embedded font to any cell size using
 // nearest-neighbour sampling, baking fg/bg at init time.
 
-use crate::{Backend, Pixel, Renderer};
+use crate::{Pixel, Renderer};
 
 /// Describes a compiled-in bitmap font.
 ///
@@ -68,20 +68,18 @@ impl RasterAtlas {
 }
 
 impl Renderer for RasterAtlas {
-    fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str) {
+    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
         let (gw, gh) = (self.glyph_w, self.glyph_h);
-        backend.render(&mut |fb, stride| {
-            let mut cx = x;
-            for byte in text.bytes() {
-                let src = self.glyph(byte as usize);
-                for gy in 0..gh {
-                    let dst_start = (y + gy) * stride + cx;
-                    fb[dst_start..dst_start + gw]
-                        .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
-                }
-                cx += gw;
+        let mut cx = x;
+        for byte in text.bytes() {
+            let src = self.glyph(byte as usize);
+            for gy in 0..gh {
+                let dst_start = (y + gy) * stride + cx;
+                fb[dst_start..dst_start + gw]
+                    .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
             }
-        });
+            cx += gw;
+        }
     }
 
     fn cell_height(&self) -> usize {

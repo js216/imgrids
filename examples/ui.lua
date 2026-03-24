@@ -57,11 +57,21 @@
 -- - Fonts can be raster or TTF; atlases are loaded at runtime before the main
 --   loop with negligible overhead.
 -- - Dynamic cell redraw uses no fill_rect: the atlas already has the background
---   color baked in, so font.draw overwrites every pixel in the cell in one
---   pass. To handle new text being shorter than old text, the transpiler
---   computes at transpile time the number of space characters needed to fill
---   the cell width, and the generated code pads the value string to that width
---   before drawing. No pixel is written twice.
+--   color baked in, so blit() overwrites every pixel in the cell in one pass.
+--   To handle new text being shorter than old text, the transpiler computes at
+--   transpile time the number of space characters needed to fill the cell width,
+--   and the generated code pads the value string to that width before blitting.
+--   No pixel is written twice.
+-- - Multiple cell redraws in one update() call are batched inside a single
+--   backend.render() closure, acquiring the framebuffer lock only once per
+--   frame regardless of how many cells changed. Each atlas exposes blit(fb,
+--   stride, x, y, text) for use inside render(); draw(backend, x, y, text) is
+--   a convenience wrapper for single draws (e.g. during initial draw_()).
+-- - Label name matching in update() uses integer IDs, not string comparisons:
+--   the transpiler assigns a unique integer to each distinct label name and
+--   emits a parallel changes: &[(u32, &str)] interface. The app maps its label
+--   names to these IDs once at startup. Per-frame dispatch is then a chain of
+--   integer comparisons — faster and smaller than strcmp.
 
 screen = {
    width  = 800,

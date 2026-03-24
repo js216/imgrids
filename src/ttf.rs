@@ -1,4 +1,4 @@
-use crate::{Backend, Pixel, Renderer};
+use crate::{Pixel, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
 
@@ -98,21 +98,19 @@ impl TtfAtlas {
 }
 
 impl Renderer for TtfAtlas {
-    fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str) {
+    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
         let ch = self.cell_h;
-        backend.render(&mut |fb, stride| {
-            let mut cx = x;
-            for byte in text.bytes() {
-                if let Some((src, gw)) = self.glyph(byte as usize) {
-                    for gy in 0..ch {
-                        let dst = (y + gy) * stride + cx;
-                        fb[dst..dst + gw]
-                            .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
-                    }
-                    cx += gw;
+        let mut cx = x;
+        for byte in text.bytes() {
+            if let Some((src, gw)) = self.glyph(byte as usize) {
+                for gy in 0..ch {
+                    let dst = (y + gy) * stride + cx;
+                    fb[dst..dst + gw]
+                        .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
                 }
+                cx += gw;
             }
-        });
+        }
     }
 
     fn cell_height(&self) -> usize {
