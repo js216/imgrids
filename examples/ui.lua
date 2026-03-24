@@ -68,10 +68,10 @@
 --   stride, x, y, text) for use inside render(); draw(backend, x, y, text) is
 --   a convenience wrapper for single draws (e.g. during initial draw_()).
 -- - Label name matching in update() uses integer IDs, not string comparisons:
---   the transpiler assigns a unique integer to each distinct label name and
---   emits a parallel changes: &[(u32, &str)] interface. The app maps its label
---   names to these IDs once at startup. Per-frame dispatch is then a chain of
---   integer comparisons — faster and smaller than strcmp.
+--   the transpiler assigns a unique u32 to each distinct label name and emits
+--   a changes: &[(u32, &str)] interface. The app maps its label names to these
+--   IDs once at startup. Per-frame dispatch is a match on u32 — the compiler
+--   emits a jump table, faster than any strcmp chain.
 
 screen = {
    width  = 800,
