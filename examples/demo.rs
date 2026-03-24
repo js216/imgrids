@@ -58,6 +58,7 @@ fn gen_random() -> String {
 }
 
 fn main() {
+    println!("imgrids demo starting");
     let mut backend = imgrids::init(SCREEN_W, SCREEN_H);
 
     let led = AtomicBool::new(false);

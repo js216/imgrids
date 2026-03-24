@@ -10,10 +10,9 @@ FB32  := target/release/examples/demo-fb32
 all: $(WASM) $(SDL2) $(ARMv7) $(FB32)
 
 $(WASM): src/sim.html $(RS)
-	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sSINGLE_FILE -sALLOW_MEMORY_GROWTH=1 --embed-file fonts --js-library=src/web.js')" \
+	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sALLOW_MEMORY_GROWTH=1 --embed-file fonts --js-library=src/web.js')" \
 	cargo build --release --example demo --features web,bpp32rgba --target wasm32-unknown-emscripten
-	sed '/^DEMO_JS$$/{r target/wasm32-unknown-emscripten/release/examples/demo.js
-	d}' src/sim.html > $(WASM)
+	cp src/sim.html $(WASM)
 
 $(SDL2): $(RS)
 	cargo clippy --features sdl,bpp16 --example demo -- -D warnings
