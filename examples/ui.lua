@@ -67,11 +67,14 @@
 --   frame regardless of how many cells changed. Each atlas exposes blit(fb,
 --   stride, x, y, text) for use inside render(); draw(backend, x, y, text) is
 --   a convenience wrapper for single draws (e.g. during initial draw_()).
--- - Label name matching in update() uses integer IDs, not string comparisons:
---   the transpiler assigns a unique u32 to each distinct label name and emits
---   a changes: &[(u32, &str)] interface. The app maps its label names to these
---   IDs once at startup. Per-frame dispatch is a match on u32 — the compiler
---   emits a jump table, faster than any strcmp chain.
+-- - Label name matching in update() uses integer IDs, not string comparisons.
+--   The transpiler assigns a unique u16 to each distinct label name (matching
+--   the parameter index returned by param_serv's list() call) and emits
+--   changes: &[(u16, &str)]. The app calls list() once at startup to obtain
+--   the name→index mapping; thereafter the diff from get() is already
+--   &[(u16, &str)] with no string-to-int conversion needed at loop time.
+--   Per-frame dispatch inside update() is a match on u16 — the compiler emits
+--   a jump table, faster than any strcmp chain.
 
 screen = {
    width  = 800,
