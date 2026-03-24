@@ -1,5 +1,4 @@
 pub mod fonts;
-pub mod layout;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Bit depth
@@ -26,6 +25,10 @@ macro_rules! rgb {
     ($r:expr, $g:expr, $b:expr) => {
         ((($r as u16 >> 3) << 11) | (($g as u16 >> 2) << 5) | ($b as u16 >> 3))
     };
+    ($t:expr) => {{
+        let (r, g, b) = $t;
+        rgb!(r, g, b)
+    }};
 }
 
 #[cfg(feature = "bpp32")]
@@ -34,6 +37,10 @@ macro_rules! rgb {
     ($r:expr, $g:expr, $b:expr) => {
         (($r as u32) << 16) | (($g as u32) << 8) | ($b as u32)
     };
+    ($t:expr) => {{
+        let (r, g, b) = $t;
+        rgb!(r, g, b)
+    }};
 }
 
 /// RGBA little-endian: bytes in memory are [R, G, B, 0xFF], matching canvas ImageData.
@@ -43,6 +50,10 @@ macro_rules! rgb {
     ($r:expr, $g:expr, $b:expr) => {
         ($r as u32) | (($g as u32) << 8) | (($b as u32) << 16) | 0xFF000000u32
     };
+    ($t:expr) => {{
+        let (r, g, b) = $t;
+        rgb!(r, g, b)
+    }};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,9 +62,10 @@ macro_rules! rgb {
 
 #[derive(Debug, Clone, Copy)]
 pub enum InputEvent {
-    Press { x: u32, y: u32 },
-    Release { x: u32, y: u32 },
-    Move { x: u32, y: u32 },
+    Press { x: usize, y: usize },
+    Release { x: usize, y: usize },
+    Move { x: usize, y: usize },
+    Quit,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -61,7 +73,7 @@ pub enum InputEvent {
 ////////////////////////////////////////////////////////////////////////////////
 
 pub trait Renderer {
-    fn draw(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str);
+    fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str);
     fn cell_height(&self) -> usize;
     fn char_width(&self, c: char) -> usize;
     fn text_width(&self, text: &str) -> usize {
@@ -81,7 +93,14 @@ pub trait Backend {
     fn height(&self) -> usize;
 
     fn clear(&mut self, color: Pixel);
-    fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel);
+    fn fill_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        color: Pixel,
+    );
 
     fn draw_border(
         &mut self,
@@ -102,14 +121,36 @@ pub trait Backend {
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize));
 
     /// Drains pending input events into an internal buffer and returns them.
-    /// Returns an empty slice on backends that have no input device.
     fn poll_events(&mut self) -> &[InputEvent] {
         &[]
     }
+}
 
-    /// Returns `true` when a quit event is pending. Defaults to `false`.
-    fn poll_quit(&mut self) -> bool {
-        false
+impl Backend for Box<dyn Backend> {
+    fn width(&self) -> usize {
+        (**self).width()
+    }
+    fn height(&self) -> usize {
+        (**self).height()
+    }
+    fn clear(&mut self, color: Pixel) {
+        (**self).clear(color)
+    }
+    fn fill_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        color: Pixel,
+    ) {
+        (**self).fill_rect(x, y, w, h, color)
+    }
+    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
+        (**self).render(draw_fn)
+    }
+    fn poll_events(&mut self) -> &[InputEvent] {
+        (**self).poll_events()
     }
 }
 
@@ -127,3 +168,28 @@ pub use sdl2::init;
 pub mod web;
 #[cfg(feature = "web")]
 pub use web::init;
+#[cfg(feature = "web")]
+pub use web::run;
+#[cfg(feature = "web")]
+pub use web::sleep;
+
+#[cfg(not(target_os = "emscripten"))]
+pub fn run(
+    mut backend: Box<dyn Backend>,
+    mut tick_fn: impl FnMut(&mut dyn Backend),
+) {
+    'main: loop {
+        for ev in backend.poll_events() {
+            if let InputEvent::Quit = ev {
+                break 'main;
+            }
+        }
+        tick_fn(&mut *backend);
+        sleep(33);
+    }
+}
+
+#[cfg(not(target_os = "emscripten"))]
+pub fn sleep(ms: u32) {
+    std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+}

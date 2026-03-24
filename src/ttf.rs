@@ -1,4 +1,4 @@
-use crate::{Pixel, Renderer};
+use crate::{Backend, Pixel, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::io;
 
@@ -15,11 +15,17 @@ pub struct TtfAtlas {
 }
 
 impl TtfAtlas {
-    pub fn new(path: &str, cell_h: usize, fg: Pixel, bg: Pixel) -> io::Result<Self> {
-        let data =
-            std::fs::read(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
-        let font = FontVec::try_from_vec(data)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    pub fn new(
+        path: &str,
+        cell_h: usize,
+        fg: Pixel,
+        bg: Pixel,
+    ) -> io::Result<Self> {
+        let data = std::fs::read(path)
+            .map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
+        let font = FontVec::try_from_vec(data).map_err(|e| {
+            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+        })?;
         Ok(Self::bake(&font, cell_h, fg, bg))
     }
 
@@ -36,7 +42,8 @@ impl TtfAtlas {
         let mut adv = [0usize; 128];
         let mut offsets = [0usize; 128];
         for code in 0u8..128 {
-            adv[code as usize] = sf.h_advance(font.glyph_id(code as char)).ceil() as usize;
+            adv[code as usize] =
+                sf.h_advance(font.glyph_id(code as char)).ceil() as usize;
         }
 
         let total: usize = adv.iter().map(|&w| w * cell_h).sum();
@@ -54,7 +61,10 @@ impl TtfAtlas {
 
             let id = font.glyph_id(code as char);
             let lsb = sf.h_side_bearing(id);
-            let glyph = id.with_scale_and_position(scale, ab_glyph::point(-lsb, baseline));
+            let glyph = id.with_scale_and_position(
+                scale,
+                ab_glyph::point(-lsb, baseline),
+            );
 
             let n = gw * cell_h;
             let mut alpha = vec![0u8; n];
@@ -88,18 +98,21 @@ impl TtfAtlas {
 }
 
 impl Renderer for TtfAtlas {
-    fn draw(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
+    fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str) {
         let ch = self.cell_h;
-        let mut cx = x;
-        for byte in text.bytes() {
-            if let Some((src, gw)) = self.glyph(byte as usize) {
-                for gy in 0..ch {
-                    let dst = (y + gy) * stride + cx;
-                    fb[dst..dst + gw].copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+        backend.render(&mut |fb, stride| {
+            let mut cx = x;
+            for byte in text.bytes() {
+                if let Some((src, gw)) = self.glyph(byte as usize) {
+                    for gy in 0..ch {
+                        let dst = (y + gy) * stride + cx;
+                        fb[dst..dst + gw]
+                            .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+                    }
+                    cx += gw;
                 }
-                cx += gw;
             }
-        }
+        });
     }
 
     fn cell_height(&self) -> usize {
@@ -171,13 +184,22 @@ fn rasterise_alpha(
     outlined.draw(|x, y, v| {
         let px = bounds.min.x as i32 + x as i32;
         let py = bounds.min.y as i32 + y as i32;
-        if px >= 0 && py >= 0 && (px as usize) < cell_w && (py as usize) < cell_h {
+        if px >= 0
+            && py >= 0
+            && (px as usize) < cell_w
+            && (py as usize) < cell_h
+        {
             alpha[py as usize * cell_w + px as usize] = (v * 255.0 + 0.5) as u8;
         }
     });
 }
 
-fn blend_into(dst: &mut [Pixel], alpha: &[u8], fg: (u32, u32, u32), bg: (u32, u32, u32)) {
+fn blend_into(
+    dst: &mut [Pixel],
+    alpha: &[u8],
+    fg: (u32, u32, u32),
+    bg: (u32, u32, u32),
+) {
     for (d, &a) in dst.iter_mut().zip(alpha.iter()) {
         let a = a as u32;
         let inv = 255 - a;

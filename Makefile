@@ -1,36 +1,38 @@
 RS := $(shell find . -name '*.rs')
 
-WASM  := target/wasm32-unknown-emscripten/release/examples/index.html
-SDL2  := target/release/examples/demo-sdl
-ARMv7 := target/armv7-unknown-linux-gnueabihf/release/examples/demo-armv7
-FB32  := target/release/examples/demo-fb32
+EXAMPLES = raw
+
+SDL2_BINS  = $(EXAMPLES:%=target/release/examples/%-sdl)
+FB32_BINS  = $(EXAMPLES:%=target/release/examples/%-fb32)
+ARMv7_BINS = $(EXAMPLES:%=target/armv7-unknown-linux-gnueabihf/release/examples/%-armv7)
+WASM_HTMLS = $(EXAMPLES:%=target/wasm32-unknown-emscripten/release/examples/%.html)
 
 .PHONY: all run clean
 
-all: $(WASM) $(SDL2) $(ARMv7) $(FB32)
+all: $(SDL2_BINS) $(FB32_BINS) $(ARMv7_BINS) $(WASM_HTMLS)
 
-run: $(SDL2)
-	$(SDL2)
+run: target/release/examples/raw-sdl
+	target/release/examples/raw-sdl
 
-$(WASM): src/sim.html $(RS)
-	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sALLOW_MEMORY_GROWTH=1 --embed-file fonts --js-library=src/web.js')" \
-	cargo build --release --example demo --features web,bpp32rgba --target wasm32-unknown-emscripten
-	cp src/sim.html $(WASM)
+target/release/examples/%-sdl: $(RS)
+	cargo clippy --features sdl,bpp16 --example $* -- -D warnings
+	cargo build --release --example $* --features sdl,bpp16
+	cp target/release/examples/$* $@
 
-$(SDL2): $(RS)
-	cargo clippy --features sdl,bpp16 --example demo -- -D warnings
-	cargo build --release --example demo --features sdl,bpp16
-	cp target/release/examples/demo $(SDL2)
+target/release/examples/%-fb32: $(RS)
+	cargo build --release --example $* --features fb0,bpp32
+	cp target/release/examples/$* $@
 
-$(FB32): $(RS)
-	cargo build --release --example demo --features fb0,bpp32
-	cp target/release/examples/demo $(FB32)
-
-$(ARMv7): $(RS)
+target/armv7-unknown-linux-gnueabihf/release/examples/%-armv7: $(RS)
 	CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
 	CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS='-C target-feature=+crt-static' \
-	cargo build --release --example demo --features fb0,bpp16 --target armv7-unknown-linux-gnueabihf
-	cp target/armv7-unknown-linux-gnueabihf/release/examples/demo $(ARMv7)
+	cargo build --release --example $* --features fb0,bpp16 --target armv7-unknown-linux-gnueabihf
+	cp target/armv7-unknown-linux-gnueabihf/release/examples/$* $@
+
+target/wasm32-unknown-emscripten/release/examples/%.html: src/sim.html $(RS)
+	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sALLOW_MEMORY_GROWTH=1 -sASYNCIFY --embed-file fonts --js-library=src/web.js')" \
+	cargo build --release --example $* --features web,bpp32rgba --target wasm32-unknown-emscripten
+	cp src/sim.html $@
 
 clean:
 	rm -rf target

@@ -20,8 +20,8 @@ bpp32 = []
 bpp32rgba = []
 
 [[example]]
-name = "demo"
-path = "examples/demo.rs"
+name = "raw"
+path = "examples/raw.rs"
 
 [profile.release]
 opt-level = 3

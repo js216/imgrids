@@ -214,7 +214,14 @@ impl Backend for Framebuf {
         self.pixels_mut().fill(color);
     }
 
-    fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
+    fn fill_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        color: Pixel,
+    ) {
         let stride = self.stride;
         let pixels = self.pixels_mut();
         for row in y..y + h {
@@ -250,15 +257,15 @@ impl Backend for Framebuf {
                 )
             };
             if n < size_of::<RawInputEvent>() as isize {
-                break; // EAGAIN or short read
+                break;
             }
             match (raw.type_, raw.code) {
                 (EV_ABS, ABS_X) => self.touch.x = raw.value,
                 (EV_ABS, ABS_Y) => self.touch.y = raw.value,
                 (EV_KEY, BTN_TOUCH) => self.touch.down = raw.value != 0,
                 (EV_SYN, SYN_REPORT) => {
-                    let x = self.touch.x as u32;
-                    let y = self.touch.y as u32;
+                    let x = self.touch.x as usize;
+                    let y = self.touch.y as usize;
                     let ev = match (self.touch.down, self.touch.prev_down) {
                         (true, false) => Some(InputEvent::Press { x, y }),
                         (false, true) => Some(InputEvent::Release { x, y }),

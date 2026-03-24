@@ -13,7 +13,6 @@ pub struct Sdl2Backend {
     // Owns the creator so that the texture lifetime is self-contained.
     _creator: Box<TextureCreator<WindowContext>>,
     events: Vec<InputEvent>,
-    quit: bool,
 }
 
 impl Sdl2Backend {
@@ -28,7 +27,11 @@ impl Sdl2Backend {
         // inside the same struct and never move or drop before `texture`.
         let texture = unsafe {
             let t = (&*creator as &TextureCreator<WindowContext>)
-                .create_texture_streaming(PixelFormatEnum::RGB565, width, height)
+                .create_texture_streaming(
+                    PixelFormatEnum::RGB565,
+                    width,
+                    height,
+                )
                 .map_err(|e| e.to_string())?;
             std::mem::transmute::<Texture<'_>, Texture<'static>>(t)
         };
@@ -40,7 +43,6 @@ impl Sdl2Backend {
             height: height as usize,
             _creator: creator,
             events: Vec::new(),
-            quit: false,
         })
     }
 }
@@ -57,7 +59,14 @@ impl Backend for Sdl2Backend {
         self.render(&mut |pixels, _stride| pixels.fill(color));
     }
 
-    fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: Pixel) {
+    fn fill_rect(
+        &mut self,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        color: Pixel,
+    ) {
         self.render(&mut |pixels, stride| {
             for row in y..y + h {
                 let start = row * stride + x;
@@ -87,10 +96,11 @@ impl Backend for Sdl2Backend {
 
     fn poll_events(&mut self) -> &[InputEvent] {
         self.events.clear();
-        self.quit = false;
         for event in self.event_pump.poll_iter() {
             match event {
-                sdl2::event::Event::Quit { .. } => self.quit = true,
+                sdl2::event::Event::Quit { .. } => {
+                    self.events.push(InputEvent::Quit);
+                }
                 sdl2::event::Event::MouseButtonDown {
                     x,
                     y,
@@ -98,8 +108,8 @@ impl Backend for Sdl2Backend {
                     ..
                 } => {
                     self.events.push(InputEvent::Press {
-                        x: x as u32,
-                        y: y as u32,
+                        x: x as usize,
+                        y: y as usize,
                     });
                 }
                 sdl2::event::Event::MouseButtonUp {
@@ -109,26 +119,22 @@ impl Backend for Sdl2Backend {
                     ..
                 } => {
                     self.events.push(InputEvent::Release {
-                        x: x as u32,
-                        y: y as u32,
+                        x: x as usize,
+                        y: y as usize,
                     });
                 }
                 sdl2::event::Event::MouseMotion {
                     x, y, mousestate, ..
                 } if mousestate.left() => {
                     self.events.push(InputEvent::Move {
-                        x: x as u32,
-                        y: y as u32,
+                        x: x as usize,
+                        y: y as usize,
                     });
                 }
                 _ => {}
             }
         }
         &self.events
-    }
-
-    fn poll_quit(&mut self) -> bool {
-        self.quit
     }
 }
 
@@ -142,5 +148,8 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
         .expect("window");
     let canvas = window.into_canvas().build().expect("canvas");
     let event_pump = sdl.event_pump().expect("event pump");
-    Box::new(Sdl2Backend::new(canvas, event_pump, w as u32, h as u32).expect("SDL2 backend"))
+    Box::new(
+        Sdl2Backend::new(canvas, event_pump, w as u32, h as u32)
+            .expect("SDL2 backend"),
+    )
 }
