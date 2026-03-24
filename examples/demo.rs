@@ -125,6 +125,7 @@ fn main() {
         WIN_H - 2 * MARGIN_Y,
     );
 
+    backend.clear(BLACK);
     backend.draw_border(WIN_X, WIN_Y, WIN_W, WIN_H, BORDER, WHITE);
 
     #[cfg(target_os = "emscripten")]
