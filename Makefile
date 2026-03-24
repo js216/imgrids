@@ -5,9 +5,12 @@ SDL2  := target/release/examples/demo-sdl
 ARMv7 := target/armv7-unknown-linux-gnueabihf/release/examples/demo-armv7
 FB32  := target/release/examples/demo-fb32
 
-.PHONY: all clean
+.PHONY: all run clean
 
 all: $(WASM) $(SDL2) $(ARMv7) $(FB32)
+
+run: $(SDL2)
+	$(SDL2)
 
 $(WASM): src/sim.html $(RS)
 	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sALLOW_MEMORY_GROWTH=1 --embed-file fonts --js-library=src/web.js')" \
