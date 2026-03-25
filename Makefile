@@ -1,6 +1,10 @@
-RS := $(shell find . -name '*.rs')
+RS  := $(shell find . -name '*.rs')
+LUA := scripts/layout.lua examples/ui.lua
 
-EXAMPLES = raw
+EXAMPLES = raw app
+
+examples/app/ui.rs: $(LUA)
+	lua scripts/layout.lua < examples/ui.lua > $@
 
 SDL2_BINS  = $(EXAMPLES:%=target/release/examples/%-sdl)
 FB32_BINS  = $(EXAMPLES:%=target/release/examples/%-fb32)

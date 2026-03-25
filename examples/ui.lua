@@ -133,10 +133,12 @@ style = {
 -- callback functions can clear screen and substitute for a different menu
 menus = {
    -- simple menu
+   -- simple menu (prev: Popup, next: Styled)
    simple_menu = {
       "col", -- first item declares layout type: row or column
-      "Item One", -- items without an explicit key are children
+      {"row", {"Prev", press={"nav", "Popup"}}, {"Next", press={"nav", "Styled"}}},
       font = fonts.roboto, -- key "font" given, so this is an attribute
+      "Item One", -- items without an explicit key are children
       "Item Two", -- no key: this is also a child
       "Item One", -- duplication is permitted
       "More Text", -- static/dynamic text (also widgets and progress bars etc.) is always vertically centered (horizontally left aligned) in its cell
@@ -144,14 +146,16 @@ menus = {
       -- (we do not provide any clipping or scrolling features)
    },
 
-   -- dynamic labels: value is a string supplied via update() changes
+   -- dynamic labels: value is a string supplied via update() changes (prev: Complex, next: Grid)
    dyn_stat_menu = {"col",
+      {"row", {"Prev", press={"nav", "Complex"}}, {"Next", press={"nav", "Grid"}}},
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label
    },
 
-   -- different ways of rendering a parameter
+   -- different ways of rendering a parameter (prev: Unequal, next: Borders)
    widget_menu = {"col",
+      {"row", {"Prev", press={"nav", "Unequal"}}, {"Next", press={"nav", "Borders"}}},
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label, converted to text
       {lbl="parameter Two", render="progress bar"}, -- show as progress bar;
@@ -160,50 +164,53 @@ menus = {
       -- for now, only "progress bar" is defined
    },
 
-   -- 2x2 grid layout
+   -- 2x2 grid layout (prev: DynStat, next: Margin)
    grid_menu = {"col",
+      {"row", {"Prev", press={"nav", "DynStat"}}, {"Next", press={"nav", "Margin"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
    },
 
-   -- popup menu
+   -- popup menu (prev: Pad, next: Simple)
    popup_menu = {"col", size = {0.50*screen.width, 0.75*screen.height}, -- takes half screen width and 75% height
       align = {0.5 * screen.width, 0.5 * screen.height}, -- where to put the menu (default: 50%/50% = screen center)
       anchor = "center", -- what `align` is defined with respect to (default = center, but all other usual anchors supported: top_left, ...)
+      {"row", {"Prev", press={"nav", "Pad"}}, {"Next", press={"nav", "Simple"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
       {"row", "Label Five", "Label Six"},
       {"row", "Label Seven", "Label Eight"},
    },
 
-   -- 2x3 grid layout with unequal sizes: "col" layout consists of rows;
-   -- weight for a row means vertical weight, for col it means horizontal weight
-   -- default weight is one, so if there's just a single cell in a menu, it takes up
-   -- the entire screen
+   -- 2x3 grid layout with unequal sizes (prev: SubStyled, next: Widget)
    unequal_menu = {"col",
+      {"row", {"Prev", press={"nav", "SubStyled"}}, {"Next", press={"nav", "Widget"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four", weight=3}, -- more vertical size than upper row
       {"row", "Label Five", "Label Six", weight=2}, -- bigger than top row and smaller than bottom row
    },
 
-   -- styling that applies to the whole menu
+   -- styling that applies to the whole menu (prev: Simple, next: SubStyled)
    styled_menu = {"col",
       font=fonts.roboto, bg=colors.green, -- unfocused state
       focused={bg=colors.red,}, -- focused state
+      {"row", {"Prev", press={"nav", "Simple"}}, {"Next", press={"nav", "SubStyled"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
    },
 
-   -- styling can apply to just one item
+   -- styling can apply to just one item (prev: Styled, next: Unequal)
    sub_styled_menu = {"col", font=fonts.roboto, bg=colors.green,
+      {"row", {"Prev", press={"nav", "Styled"}}, {"Next", press={"nav", "Unequal"}}},
       {"row", "Label One", "Label Two"},
       {"row",
          {"Label Three", font=fonts.myriad}, -- 1st elem of tbl not "row" or "col" -> leaf node
          "Label Four"},
    },
 
-   -- three buttons one above another
+   -- three buttons one above another (prev: Borders, next: Complex)
    clickable_menu = {"col",
+      {"row", {"Prev", press={"nav", "Borders"}}, {"Next", press={"nav", "Complex"}}},
    -- press = {"fn_name", args...}: first element is function name, rest are
    -- static string args baked at transpile time. Callback: fn(args: &[&str]).
       {"Click me!", press = {"function_cl"}},           -- zero args: &[]
@@ -212,31 +219,37 @@ menus = {
       {lbl="parameter One", press={"fn3"}},             -- dynamic label, clickable
    },
 
-   -- more complex grid layout (could be nested to arbitrary depth)
-   complex_menu = {"row",
-      {"col", "Label One", "Label Two"},
-      {"col",
-         {"row", "Label Three", "Label Four"},
-         {"row", "Label Five", "Label Six", "Label Seven"},
-         {"row", "Click!", press={"click"}},
+   -- more complex grid layout (prev: Clickable, next: DynStat)
+   complex_menu = {"col",
+      {"row", {"Prev", press={"nav", "Clickable"}}, {"Next", press={"nav", "DynStat"}}},
+      {"row",
+         {"col", "Label One", "Label Two"},
+         {"col",
+            {"row", "Label Three", "Label Four"},
+            {"row", "Label Five", "Label Six", "Label Seven"},
+            {"row", "Click!", press={"click"}},
+         },
       },
    },
 
-   -- any element can have padding (default unit: pixels)
+   -- any element can have padding (prev: Margin, next: Popup)
    pad_menu = {"col", pad = 10, -- padding on all sides around the menu
+      {"row", {"Prev", press={"nav", "Margin"}}, {"Next", press={"nav", "Popup"}}},
       {"row", {"Label One", pad_left = 3}, "Label Two"}, -- left padding for one item only (also have: pad_top, pad_right)
       {"row", "Label Three", "Label Four", pad_bottom = 10}, -- bottom padding for the whole row
    },
 
-   -- margin is external space (vs padding = internal space)
+   -- margin is external space (vs padding = internal space) (prev: Grid, next: Pad)
    margin_menu = {"col", margin = 5, -- outer margin for the menu (not children!)
+      {"row", {"Prev", press={"nav", "Grid"}}, {"Next", press={"nav", "Pad"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
       {"row", "Label Five", bg=colors.green}, -- margin is NOT green, only the inside of the row
    },
 
-   -- borders
+   -- borders (prev: Widget, next: Clickable)
    borders_menu = {"col",
+      {"row", {"Prev", press={"nav", "Widget"}}, {"Next", press={"nav", "Clickable"}}},
       {"row", "Label One", "Label Two", border = {width = 3, color = colors.green}}, -- 3 px wide green border around the row
       {"row", "Label Three", {"Label Four", border = {width = 2}}}, -- just one cell has the border
       {"row", "Label Five", border = {width = 3, side = "top"}}, -- border only on top side
