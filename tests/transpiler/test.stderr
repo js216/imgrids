@@ -1,0 +1,4 @@
+ERROR: menu name "bad_name" is not PascalCase.
+  Menu names are used verbatim as Rust enum variant names and must
+  start with an uppercase letter and contain only letters and digits.
+  Suggestion: rename it to "BadName" or similar.

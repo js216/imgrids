@@ -3,9 +3,6 @@ LUA := scripts/layout.lua examples/ui.lua
 
 EXAMPLES = raw app
 
-examples/app/ui.rs: $(LUA)
-	lua scripts/layout.lua < examples/ui.lua > $@
-
 SDL2_BINS  = $(EXAMPLES:%=target/release/examples/%-sdl)
 FB32_BINS  = $(EXAMPLES:%=target/release/examples/%-fb32)
 ARMv7_BINS = $(EXAMPLES:%=target/armv7-unknown-linux-gnueabihf/release/examples/%-armv7)
@@ -14,6 +11,9 @@ WASM_HTMLS = $(EXAMPLES:%=target/wasm32-unknown-emscripten/release/examples/%.ht
 .PHONY: all run clean
 
 all: $(SDL2_BINS) $(FB32_BINS) $(ARMv7_BINS) $(WASM_HTMLS)
+
+examples/app/ui.rs: $(LUA)
+	lua scripts/layout.lua < examples/ui.lua > $@
 
 run: target/release/examples/raw-sdl
 	target/release/examples/raw-sdl

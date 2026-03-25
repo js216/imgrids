@@ -18,8 +18,8 @@
 -- Generated API overview:
 --
 --   pub enum Menu { Simple, Clickable, ... }  -- one variant per menu
---     Menu names are snake_case in ui.lua; the _menu suffix is stripped and
---     the remainder converted to PascalCase: simple_menu → Simple.
+--     Menu names in ui.lua must be PascalCase (they are used verbatim as
+--     Rust enum variant names).
 --
 --   pub fn draw(backend, menu)
 --     Called once when switching to a menu. Draws static structure (backgrounds,
@@ -109,7 +109,7 @@ style = {
       margin = 0, -- default unit for all dimensions: pixels
       pad = 0,
       border = {
-         width = 0,
+         width = 5,
          color = colors.white,
       },
    },
@@ -132,9 +132,8 @@ style = {
 -- app has a variable that keeps the current menu displayed;
 -- callback functions can clear screen and substitute for a different menu
 menus = {
-   -- simple menu
    -- simple menu (prev: Popup, next: Styled)
-   simple_menu = {
+   Simple = {
       "col", -- first item declares layout type: row or column
       {"row", {"Prev", press={"nav", "Popup"}}, {"Next", press={"nav", "Styled"}}},
       font = fonts.roboto, -- key "font" given, so this is an attribute
@@ -147,14 +146,14 @@ menus = {
    },
 
    -- dynamic labels: value is a string supplied via update() changes (prev: Complex, next: Grid)
-   dyn_stat_menu = {"col",
+   DynStat = {"col",
       {"row", {"Prev", press={"nav", "Complex"}}, {"Next", press={"nav", "Grid"}}},
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label
    },
 
    -- different ways of rendering a parameter (prev: Unequal, next: Borders)
-   widget_menu = {"col",
+   Widget = {"col",
       {"row", {"Prev", press={"nav", "Unequal"}}, {"Next", press={"nav", "Borders"}}},
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label, converted to text
@@ -165,14 +164,14 @@ menus = {
    },
 
    -- 2x2 grid layout (prev: DynStat, next: Margin)
-   grid_menu = {"col",
+   Grid = {"col",
       {"row", {"Prev", press={"nav", "DynStat"}}, {"Next", press={"nav", "Margin"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
    },
 
    -- popup menu (prev: Pad, next: Simple)
-   popup_menu = {"col", size = {0.50*screen.width, 0.75*screen.height}, -- takes half screen width and 75% height
+   Popup = {"col", size = {0.50*screen.width, 0.75*screen.height}, -- takes half screen width and 75% height
       align = {0.5 * screen.width, 0.5 * screen.height}, -- where to put the menu (default: 50%/50% = screen center)
       anchor = "center", -- what `align` is defined with respect to (default = center, but all other usual anchors supported: top_left, ...)
       {"row", {"Prev", press={"nav", "Pad"}}, {"Next", press={"nav", "Simple"}}},
@@ -183,7 +182,7 @@ menus = {
    },
 
    -- 2x3 grid layout with unequal sizes (prev: SubStyled, next: Widget)
-   unequal_menu = {"col",
+   Unequal = {"col",
       {"row", {"Prev", press={"nav", "SubStyled"}}, {"Next", press={"nav", "Widget"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four", weight=3}, -- more vertical size than upper row
@@ -191,7 +190,7 @@ menus = {
    },
 
    -- styling that applies to the whole menu (prev: Simple, next: SubStyled)
-   styled_menu = {"col",
+   Styled = {"col",
       font=fonts.roboto, bg=colors.green, -- unfocused state
       focused={bg=colors.red,}, -- focused state
       {"row", {"Prev", press={"nav", "Simple"}}, {"Next", press={"nav", "SubStyled"}}},
@@ -200,7 +199,7 @@ menus = {
    },
 
    -- styling can apply to just one item (prev: Styled, next: Unequal)
-   sub_styled_menu = {"col", font=fonts.roboto, bg=colors.green,
+   SubStyled = {"col", font=fonts.roboto, bg=colors.green,
       {"row", {"Prev", press={"nav", "Styled"}}, {"Next", press={"nav", "Unequal"}}},
       {"row", "Label One", "Label Two"},
       {"row",
@@ -209,7 +208,7 @@ menus = {
    },
 
    -- three buttons one above another (prev: Borders, next: Complex)
-   clickable_menu = {"col",
+   Clickable = {"col",
       {"row", {"Prev", press={"nav", "Borders"}}, {"Next", press={"nav", "Complex"}}},
    -- press = {"fn_name", args...}: first element is function name, rest are
    -- static string args baked at transpile time. Callback: fn(args: &[&str]).
@@ -220,7 +219,7 @@ menus = {
    },
 
    -- more complex grid layout (prev: Clickable, next: DynStat)
-   complex_menu = {"col",
+   Complex = {"col",
       {"row", {"Prev", press={"nav", "Clickable"}}, {"Next", press={"nav", "DynStat"}}},
       {"row",
          {"col", "Label One", "Label Two"},
@@ -233,14 +232,14 @@ menus = {
    },
 
    -- any element can have padding (prev: Margin, next: Popup)
-   pad_menu = {"col", pad = 10, -- padding on all sides around the menu
+   Pad = {"col", pad = 10, -- padding on all sides around the menu
       {"row", {"Prev", press={"nav", "Margin"}}, {"Next", press={"nav", "Popup"}}},
       {"row", {"Label One", pad_left = 3}, "Label Two"}, -- left padding for one item only (also have: pad_top, pad_right)
       {"row", "Label Three", "Label Four", pad_bottom = 10}, -- bottom padding for the whole row
    },
 
    -- margin is external space (vs padding = internal space) (prev: Grid, next: Pad)
-   margin_menu = {"col", margin = 5, -- outer margin for the menu (not children!)
+   Margin = {"col", margin = 5, -- outer margin for the menu (not children!)
       {"row", {"Prev", press={"nav", "Grid"}}, {"Next", press={"nav", "Pad"}}},
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
@@ -248,12 +247,11 @@ menus = {
    },
 
    -- borders (prev: Widget, next: Clickable)
-   borders_menu = {"col",
+   Borders = {"col",
       {"row", {"Prev", press={"nav", "Widget"}}, {"Next", press={"nav", "Clickable"}}},
       {"row", "Label One", "Label Two", border = {width = 3, color = colors.green}}, -- 3 px wide green border around the row
       {"row", "Label Three", {"Label Four", border = {width = 2}}}, -- just one cell has the border
       {"row", "Label Five", border = {width = 3, side = "top"}}, -- border only on top side
-      {"row", "Label Six", border = {side = "top"}}, -- print WARNING: zero-width border
       {"row", "Label Seven", bg=colors.green}, -- whole row is green INCLUDING the padding
    },
 }

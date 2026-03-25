@@ -13,18 +13,28 @@ if not chunk then
 end
 chunk()
 
+local warn_count = 0
+local function warn(fmt, ...)
+    io.stderr:write(("WARNING: " .. fmt .. "\n"):format(...))
+    warn_count = warn_count + 1
+end
+
 -------------------------------------------------------------------------------
 -- 2. Utilities
 -------------------------------------------------------------------------------
-local function to_pascal(s)
-    s = s:gsub("_menu$", "")
-    local parts = {}
-    for part in (s .. "_"):gmatch("([^_]*)_") do
-        if #part > 0 then
-            parts[#parts + 1] = part:sub(1, 1):upper() .. part:sub(2)
-        end
+
+-- Menu names must be PascalCase: they are used verbatim as Rust enum variant
+-- names.  A valid PascalCase identifier starts with an uppercase ASCII letter
+-- and contains only ASCII letters and digits.
+local function check_menu_name(name)
+    if not name:match("^[A-Z][A-Za-z0-9]*$") then
+        io.stderr:write(("ERROR: menu name %q is not PascalCase.\n"):format(name))
+        io.stderr:write("  Menu names are used verbatim as Rust enum variant names and must\n")
+        io.stderr:write("  start with an uppercase letter and contain only letters and digits.\n")
+        io.stderr:write(("  Suggestion: rename it to %q or similar.\n")
+            :format(name:sub(1,1):upper() .. name:sub(2):gsub("_(%a)", string.upper):gsub("_", "")))
+        os.exit(1)
     end
-    return table.concat(parts)
 end
 
 local function rgb_lit(c)
@@ -54,8 +64,8 @@ local function resolve_raster_font(font)
     local name = raster_mod(font)
     local size = font[2]
     if not RASTER_DIMS[name] then
-        io.stderr:write(("WARNING: unknown raster font '%s', falling back to %s at size %d\n")
-            :format(font[1], RASTER_FALLBACK, RASTER_FALLBACK_SIZE))
+        warn("unknown raster font '%s', falling back to %s at size %d",
+            font[1], RASTER_FALLBACK, RASTER_FALLBACK_SIZE)
         name = RASTER_FALLBACK
         size = RASTER_FALLBACK_SIZE
     end
@@ -144,8 +154,7 @@ local function merge_style(base, node)
         end
         if node.border.side then s.border.side = node.border.side end
         if s.border.width == 0 and s.border.side then
-            io.stderr:write(("WARNING: border has side='%s' but width=0 (no pixels drawn)\n")
-                :format(s.border.side))
+            warn("border has side='%s' but width=0 (no pixels drawn)", s.border.side)
         end
     end
     return s
@@ -156,6 +165,16 @@ local function eff_pad(s, side)
     if side == "top"    then return s.pad_top    or s.pad end
     if side == "right"  then return s.pad_right  or s.pad end
     if side == "bottom" then return s.pad_bottom or s.pad end
+end
+
+-- Border inset for a given side: the border eats into usable space.
+-- A full border (no side restriction) affects all four sides.
+local function border_inset(s, side)
+    if s.border.width == 0 then return 0 end
+    if s.border.side == nil or s.border.side == side then
+        return s.border.width
+    end
+    return 0
 end
 
 -------------------------------------------------------------------------------
@@ -206,7 +225,7 @@ local function get_press(node)
     if not p then return nil end
     if type(p) == "string" then
         -- old syntax: warn and wrap
-        io.stderr:write(("WARNING: old press syntax press=%q, use press={\"%s\"}\n"):format(p, p))
+        warn("old press syntax press=%q, use press={\"%s\"}", p, p)
         return {p}
     end
     return p
@@ -226,9 +245,11 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
         local children = {}
         for i = 2, #node do children[#children + 1] = node[i] end
 
-        -- Container padding
-        local pl = eff_pad(s, "left");  local pt = eff_pad(s, "top")
-        local pr = eff_pad(s, "right"); local pb = eff_pad(s, "bottom")
+        -- Container padding + border inset (border eats into child layout space)
+        local pl = eff_pad(s, "left")   + border_inset(s, "left")
+        local pt = eff_pad(s, "top")    + border_inset(s, "top")
+        local pr = eff_pad(s, "right")  + border_inset(s, "right")
+        local pb = eff_pad(s, "bottom") + border_inset(s, "bottom")
         local ix = x + pl;  local iy = y + pt
         local iw = w - pl - pr;  local ih = h - pt - pb
 
@@ -296,8 +317,14 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
         local atlas   = get_atlas(s.font, s.fg, s.bg)
         local ch_px   = cell_height_est(s.font)
         local cw_px   = char_width_est(s.font)
-        local text_y  = y + math.floor((h - ch_px) / 2)
-        local pad_chars = math.max(0, math.floor(w / cw_px))
+        -- Inset by border so text is drawn inside the border, not under it
+        local bx = border_inset(s, "left")
+        local by = border_inset(s, "top")
+        local bw = bx + border_inset(s, "right")
+        local bh = by + border_inset(s, "bottom")
+        local text_x  = x + bx
+        local text_y  = (y + by) + math.floor(((h - bh) - ch_px) / 2)
+        local pad_chars = math.max(0, math.floor((w - bw) / cw_px))
 
         if lbl then
             if render == "progress bar" then
@@ -312,7 +339,7 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
                 ops[#ops + 1] = {
                     kind      = "dynamic",
                     x=x, y=y, w=w, h=h,
-                    text_x    = x,
+                    text_x    = text_x,
                     text_y    = text_y,
                     lbl       = lbl,
                     atlas     = atlas,
@@ -324,7 +351,7 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
             ops[#ops + 1] = {
                 kind   = "static",
                 x=x, y=y, w=w, h=h,
-                text_x = x,
+                text_x = text_x,
                 text_y = text_y,
                 text   = text,
                 atlas  = atlas,
@@ -347,7 +374,10 @@ end
 
 -- Compute layout for all menus
 local menu_names = {}
-for name in pairs(menus) do menu_names[#menu_names + 1] = name end
+for name in pairs(menus) do
+    check_menu_name(name)
+    menu_names[#menu_names + 1] = name
+end
 table.sort(menu_names)
 
 local menu_ops = {}
@@ -372,7 +402,7 @@ for _, name in ipairs(menu_names) do
                 mx = math.floor(ax)
                 my = math.floor(ay)
             else
-                io.stderr:write(("WARNING: unknown anchor '%s', using center\n"):format(anchor))
+                warn("unknown anchor '%s', using center", anchor)
                 mx = math.floor(ax - mw / 2)
                 my = math.floor(ay - mh / 2)
             end
@@ -442,6 +472,7 @@ e("use imgrids::{rgb, Backend, InputEvent%s};",
 if need_raster then e("use imgrids::raster::RasterAtlas;") end
 if need_ttf    then e("use imgrids::ttf::TtfAtlas;")       end
 if #atlases > 0 then e("use std::sync::OnceLock;") end
+e("use std::sync::Mutex;")
 e("")
 
 -- Atlas statics and getters
@@ -470,24 +501,101 @@ end
 e("#[derive(Clone, Copy, PartialEq)]")
 e("pub enum Menu {")
 for _, name in ipairs(menu_names) do
-    e("    %s,", to_pascal(name))
+    e("    %s,", name)
 end
 e("}")
 e("")
 
--- draw() dispatch
-e("pub fn draw(backend: &mut dyn Backend, menu: Menu) {")
-e("    match menu {")
+-- CURRENT_MENU static
+e("static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);")
+e("")
+
+-- Collect callbacks: map fn_name -> max_nargs
+local callbacks     = {}
+local callback_list = {}
 for _, name in ipairs(menu_names) do
-    e("        Menu::%s => draw_%s(backend),", to_pascal(name), name)
+    for _, op in ipairs(menu_ops[name]) do
+        if op.press then
+            local fn_name = op.press[1]
+            local nargs   = #op.press - 1
+            if callbacks[fn_name] == nil then
+                callbacks[fn_name] = nargs
+                callback_list[#callback_list+1] = fn_name
+            elseif nargs > callbacks[fn_name] then
+                callbacks[fn_name] = nargs
+            end
+        end
+    end
 end
+table.sort(callback_list)
+
+-- Callbacks trait
+e("pub trait Callbacks {")
+e("    fn quit(&mut self);")
+for _, fn_name in ipairs(callback_list) do
+    if callbacks[fn_name] > 0 then
+        e("    fn %s(&mut self, args: &[&str]);", fn_name)
+    else
+        e("    fn %s(&mut self);", fn_name)
+    end
+end
+e("}")
+e("")
+
+-- to_menu()
+e("pub fn to_menu(name: &str) -> Option<Menu> {")
+e("    match name {")
+for _, name in ipairs(menu_names) do
+    e("        %q => Some(Menu::%s),", name, name)
+end
+e("        _ => None,")
+e("    }")
+e("}")
+e("")
+
+-- update_events<C: Callbacks>()
+e("pub fn update_events<C: Callbacks>(events: &[InputEvent], state: &mut C) {")
+e("    for ev in events {")
+e("        if let InputEvent::Quit = ev { state.quit(); return; }")
+e("    }")
+e("    match *CURRENT_MENU.lock().unwrap() {")
+for _, name in ipairs(menu_names) do
+    e("        Some(Menu::%s) => update_events_%s(events, state),", name, name:lower())
+end
+e("        None => {}")
+e("    }")
+e("}")
+e("")
+
+-- update_menu()
+e("pub fn update_menu(backend: &mut dyn Backend, menu: Menu) {")
+e("    let mut current = CURRENT_MENU.lock().unwrap();")
+e("    if *current != Some(menu) {")
+e("        *current = Some(menu);")
+e("        drop(current);")
+e("        match menu {")
+for _, name in ipairs(menu_names) do
+    e("            Menu::%s => draw_%s(backend),", name, name:lower())
+end
+e("        }")
+e("    }")
+e("}")
+e("")
+
+-- update_changes()
+e("pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {")
+e("    match *CURRENT_MENU.lock().unwrap() {")
+for _, name in ipairs(menu_names) do
+    e("        Some(Menu::%s) => update_changes_%s(backend, changes),", name, name:lower())
+end
+e("        None => {}")
 e("    }")
 e("}")
 e("")
 
 -- draw_<menu>() per-menu functions
 for _, name in ipairs(menu_names) do
-    e("fn draw_%s(backend: &mut dyn Backend) {", name)
+    e("fn draw_%s(backend: &mut dyn Backend) {", name:lower())
     e("    backend.fill_rect(0, 0, %d, %d, %s);",
         screen.width, screen.height, rgb_lit(default_style.bg))
     for _, op in ipairs(menu_ops[name]) do
@@ -495,7 +603,6 @@ for _, name in ipairs(menu_names) do
             e("    %s().draw(backend, %d, %d, %q);",
                 op.atlas.fn_name, op.text_x, op.text_y, op.text)
         elseif op.kind == "dynamic" or op.kind == "progress" then
-            -- Leave blank; update() will fill on first call
             local bg = op.atlas and op.atlas.bg or op.bg
             e("    backend.fill_rect(%d, %d, %d, %d, %s);",
                 op.x, op.y, op.w, op.h, rgb_lit(bg))
@@ -518,48 +625,66 @@ for _, name in ipairs(menu_names) do
     e("")
 end
 
--- update() dispatch
-e("pub fn update(")
-e("    backend: &mut dyn Backend,")
-e("    menu: Menu,")
-e("    changes: &[(&str, &str)],")
-e("    events: &[InputEvent],")
-e(") -> Option<Menu> {")
-e("    match menu {")
-for _, name in ipairs(menu_names) do
-    e("        Menu::%s => update_%s(backend, changes, events),", to_pascal(name), name)
-end
-e("    }")
-e("}")
-e("")
-
--- update_<menu>() per-menu functions
+-- update_events_<menu><C: Callbacks>() per-menu functions
 for _, name in ipairs(menu_names) do
     local ops = menu_ops[name]
-    local dyn_ops   = {}
-    local prog_ops  = {}
     local press_ops = {}
     for _, op in ipairs(ops) do
-        if op.kind == "dynamic" then dyn_ops[#dyn_ops + 1] = op end
-        if op.kind == "progress" then prog_ops[#prog_ops + 1] = op end
         if op.press then press_ops[#press_ops + 1] = op end
     end
 
-    local ev_param  = #press_ops > 0               and "events"  or "_events"
-    local be_param  = (#dyn_ops + #prog_ops) > 0   and "backend" or "_backend"
-    local chg_param = (#dyn_ops + #prog_ops) > 0   and "changes" or "_changes"
-    e("fn update_%s(", name)
-    e("    %s: &mut dyn Backend,", be_param)
-    e("    %s: &[(&str, &str)],", chg_param)
-    e("    %s: &[InputEvent],", ev_param)
-    e(") -> Option<Menu> {")
+    local ev_param = #press_ops > 0 and "events"  or "_events"
+    local st_param = #press_ops > 0 and "state"   or "_state"
+    e("fn update_events_%s<C: Callbacks>(%s: &[InputEvent], %s: &mut C) {",
+        name:lower(), ev_param, st_param)
 
-    -- All dynamic text redraws in one render() closure
+    if #press_ops > 0 then
+        e("    for ev in events {")
+        e("        if let InputEvent::Press { x, y } = ev {")
+        for _, op in ipairs(press_ops) do
+            local fn_name = op.press[1]
+            local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
+            local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
+            e("            if %s*x < %d && %s*y < %d {",
+                x_lo, op.x + op.w, y_lo, op.y + op.h)
+            if callbacks[fn_name] > 0 then
+                local args = {}
+                for i = 2, #op.press do
+                    args[#args + 1] = ("%q"):format(op.press[i])
+                end
+                e("                state.%s(&[%s]);", fn_name, table.concat(args, ", "))
+            else
+                e("                state.%s();", fn_name)
+            end
+            e("            }")
+        end
+        e("        }")
+        e("    }")
+    end
+
+    e("}")
+    e("")
+end
+
+-- update_changes_<menu>() per-menu functions
+for _, name in ipairs(menu_names) do
+    local ops = menu_ops[name]
+    local dyn_ops  = {}
+    local prog_ops = {}
+    for _, op in ipairs(ops) do
+        if op.kind == "dynamic" then dyn_ops[#dyn_ops + 1] = op end
+        if op.kind == "progress" then prog_ops[#prog_ops + 1] = op end
+    end
+
+    local be_param  = (#dyn_ops + #prog_ops) > 0 and "backend" or "_backend"
+    local chg_param = (#dyn_ops + #prog_ops) > 0 and "changes" or "_changes"
+    e("fn update_changes_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {",
+        name:lower(), be_param, chg_param)
+
     if #dyn_ops > 0 then
         e("    backend.render(&mut |fb, stride| {")
         e("        for &(name, val) in changes {")
         if #dyn_ops == 1 then
-            -- single label: if is cleaner than match (avoids clippy single_match)
             local op = dyn_ops[1]
             e("            if name == %q {", op.lbl)
             e("                %s().blit(fb, stride, %d, %d,", op.atlas.fn_name, op.text_x, op.text_y)
@@ -579,7 +704,6 @@ for _, name in ipairs(menu_names) do
         e("    });")
     end
 
-    -- Progress bar redraws (direct fill_rect, cannot batch in render())
     if #prog_ops > 0 then
         e("    for &(name, val) in changes {")
         for _, op in ipairs(prog_ops) do
@@ -602,38 +726,10 @@ for _, name in ipairs(menu_names) do
         e("    }")
     end
 
-    -- Press hit-testing
-    if #press_ops > 0 then
-        e("    for ev in events {")
-        e("        if let InputEvent::Press { x, y } = ev {")
-        for _, op in ipairs(press_ops) do
-            local fn_name = op.press[1]
-            local args = {}
-            for i = 2, #op.press do
-                args[#args + 1] = ("%q"):format(op.press[i])
-            end
-            -- usize is always >= 0; skip the lower-bound check when it is 0
-            local x_lo = op.x   > 0 and ("*x >= %d && "):format(op.x)   or ""
-            local y_lo = op.y   > 0 and ("*y >= %d && "):format(op.y)   or ""
-            e("            if %s*x < %d && %s*y < %d {",
-                x_lo, op.x + op.w, y_lo, op.y + op.h)
-            e("                if let Some(m) = super::%s(&[%s]) { return Some(m); }",
-                fn_name, table.concat(args, ", "))
-            e("            }")
-        end
-        e("        }")
-        e("    }")
-    end
-
-    -- Suppress unused-variable warnings when a menu has no ops at all
-    if #dyn_ops == 0 and #prog_ops == 0 and #press_ops == 0 then
-        e("    let _ = (%s, %s, %s);", be_param, chg_param, ev_param)
-    end
-
-    e("    None")
     e("}")
     e("")
 end
 
 io.write(table.concat(out, "\n"))
 io.write("\n")
+if warn_count > 0 then os.exit(1) end
