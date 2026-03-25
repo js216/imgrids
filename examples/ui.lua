@@ -218,7 +218,7 @@ menus = {
       {"col",
          {"row", "Label Three", "Label Four"},
          {"row", "Label Five", "Label Six", "Label Seven"},
-         {"row", "Click!", press="click"},
+         {"row", "Click!", press={"click"}},
       },
    },
 

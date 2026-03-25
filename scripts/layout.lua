@@ -1,0 +1,604 @@
+#!/usr/bin/env lua
+-- layout.lua — transpile ui.lua to a Rust imgrids UI module
+-- Usage: lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
+
+-------------------------------------------------------------------------------
+-- 1. Execute input
+-------------------------------------------------------------------------------
+local src = io.read("*a")
+local chunk, err = load(src)
+if not chunk then
+    io.stderr:write("ERROR: " .. tostring(err) .. "\n")
+    os.exit(1)
+end
+chunk()
+
+-------------------------------------------------------------------------------
+-- 2. Utilities
+-------------------------------------------------------------------------------
+local function to_pascal(s)
+    s = s:gsub("_menu$", "")
+    local parts = {}
+    for part in (s .. "_"):gmatch("([^_]*)_") do
+        if #part > 0 then
+            parts[#parts + 1] = part:sub(1, 1):upper() .. part:sub(2)
+        end
+    end
+    return table.concat(parts)
+end
+
+local function rgb_lit(c)
+    return ("rgb!(%d, %d, %d)"):format(c[1], c[2], c[3])
+end
+
+local function is_raster(font)
+    return type(font[1]) == "string" and font[1]:sub(1, 7) == "raster:"
+end
+
+local function raster_mod(font)
+    return font[1]:match("raster::(.+)")
+end
+
+-- Known raster fonts: {natural_w, natural_h}
+local RASTER_DIMS = {
+    font_vga16         = {8, 16},
+    font8x8            = {8,  8},
+    font_terminus_8x16 = {8, 16},
+}
+
+-- Fallback for unknown raster fonts (big and ugly so the problem is obvious)
+local RASTER_FALLBACK = "font_vga16"
+local RASTER_FALLBACK_SIZE = 32
+
+local function resolve_raster_font(font)
+    local name = raster_mod(font)
+    local size = font[2]
+    if not RASTER_DIMS[name] then
+        io.stderr:write(("WARNING: unknown raster font '%s', falling back to %s at size %d\n")
+            :format(font[1], RASTER_FALLBACK, RASTER_FALLBACK_SIZE))
+        name = RASTER_FALLBACK
+        size = RASTER_FALLBACK_SIZE
+    end
+    local dims = RASTER_DIMS[name]
+    local glyph_h = size
+    local glyph_w = math.floor(size * dims[1] / dims[2])
+    return name, glyph_w, glyph_h
+end
+
+local function char_width_est(font)
+    if is_raster(font) then
+        local _, glyph_w, _ = resolve_raster_font(font)
+        return glyph_w
+    else
+        -- TTF: ~0.55 * cell_h (good approximation for RobotoMono; conservative for proportional)
+        return math.max(1, math.floor(font[2] * 0.55))
+    end
+end
+
+local function cell_height_est(font)
+    if is_raster(font) then
+        local _, _, glyph_h = resolve_raster_font(font)
+        return glyph_h
+    else
+        return font[2]
+    end
+end
+
+-------------------------------------------------------------------------------
+-- 3. Default and focused styles from style.normal / style.focused
+-------------------------------------------------------------------------------
+local function make_border(b)
+    b = b or {}
+    return {
+        width = b.width or 0,
+        color = b.color or {255, 255, 255},
+        side  = b.side,
+    }
+end
+
+local default_style = {
+    font   = style.normal.font,
+    fg     = style.normal.fg,
+    bg     = style.normal.bg,
+    pad    = style.normal.pad    or 0,
+    pad_left = nil, pad_top = nil, pad_right = nil, pad_bottom = nil,
+    margin = style.normal.margin or 0,
+    border = make_border(style.normal.border),
+}
+
+local focused_ovr = style.focused or {}
+
+local function copy_style(s)
+    return {
+        font = s.font,
+        fg   = {s.fg[1], s.fg[2], s.fg[3]},
+        bg   = {s.bg[1], s.bg[2], s.bg[3]},
+        pad  = s.pad,
+        pad_left = s.pad_left, pad_top = s.pad_top,
+        pad_right = s.pad_right, pad_bottom = s.pad_bottom,
+        margin = s.margin,
+        border = {
+            width = s.border.width,
+            color = {s.border.color[1], s.border.color[2], s.border.color[3]},
+            side  = s.border.side,
+        },
+    }
+end
+
+local function merge_style(base, node)
+    local s = copy_style(base)
+    if type(node) ~= "table" then return s end
+    if node.font       then s.font = node.font end
+    if node.fg         then s.fg = {node.fg[1], node.fg[2], node.fg[3]} end
+    if node.bg         then s.bg = {node.bg[1], node.bg[2], node.bg[3]} end
+    if node.pad        then s.pad = node.pad end
+    if node.pad_left   then s.pad_left   = node.pad_left   end
+    if node.pad_top    then s.pad_top    = node.pad_top    end
+    if node.pad_right  then s.pad_right  = node.pad_right  end
+    if node.pad_bottom then s.pad_bottom = node.pad_bottom end
+    if node.margin     then s.margin = node.margin end
+    if node.border then
+        if node.border.width ~= nil then s.border.width = node.border.width end
+        if node.border.color then
+            s.border.color = {node.border.color[1], node.border.color[2], node.border.color[3]}
+        end
+        if node.border.side then s.border.side = node.border.side end
+        if s.border.width == 0 and s.border.side then
+            io.stderr:write(("WARNING: border has side='%s' but width=0 (no pixels drawn)\n")
+                :format(s.border.side))
+        end
+    end
+    return s
+end
+
+local function eff_pad(s, side)
+    if side == "left"   then return s.pad_left   or s.pad end
+    if side == "top"    then return s.pad_top    or s.pad end
+    if side == "right"  then return s.pad_right  or s.pad end
+    if side == "bottom" then return s.pad_bottom or s.pad end
+end
+
+-------------------------------------------------------------------------------
+-- 4. Atlas registry
+-------------------------------------------------------------------------------
+local atlases   = {}   -- ordered list
+local atlas_map = {}   -- key string -> record
+
+local function atlas_key(font, fg, bg)
+    if is_raster(font) then
+        local name, gw, gh = resolve_raster_font(font)
+        return ("R:%s:%d:%d:%d:%d:%d:%d:%d:%d"):format(
+            name, gw, gh, fg[1], fg[2], fg[3], bg[1], bg[2], bg[3])
+    else
+        return ("T:%s:%d:%d:%d:%d:%d:%d:%d"):format(
+            font[1], font[2], fg[1], fg[2], fg[3], bg[1], bg[2], bg[3])
+    end
+end
+
+local function get_atlas(font, fg, bg)
+    local k = atlas_key(font, fg, bg)
+    if atlas_map[k] then return atlas_map[k] end
+    local idx = #atlases + 1
+    local rec = {
+        key     = k,
+        font    = font,
+        fg      = {fg[1], fg[2], fg[3]},
+        bg      = {bg[1], bg[2], bg[3]},
+        idx     = idx,
+        varname = ("ATLAS_%d"):format(idx),
+        fn_name = ("atlas_%d"):format(idx),
+    }
+    atlases[#atlases + 1] = rec
+    atlas_map[k] = rec
+    return rec
+end
+
+-------------------------------------------------------------------------------
+-- 5. Layout pass
+-------------------------------------------------------------------------------
+local function is_container(node)
+    return type(node) == "table" and (node[1] == "row" or node[1] == "col")
+end
+
+local function get_press(node)
+    if type(node) ~= "table" then return nil end
+    local p = node.press
+    if not p then return nil end
+    if type(p) == "string" then
+        -- old syntax: warn and wrap
+        io.stderr:write(("WARNING: old press syntax press=%q, use press={\"%s\"}\n"):format(p, p))
+        return {p}
+    end
+    return p
+end
+
+local function layout_node(node, x, y, w, h, parent_style, ops)
+    local s = merge_style(parent_style, node)
+
+    -- Apply margin
+    local mx = s.margin
+    x = x + mx;  y = y + mx;  w = w - 2*mx;  h = h - 2*mx
+
+    if is_container(node) then
+        local dir = node[1]
+
+        -- Collect integer-keyed children (skip [1] which is "row"/"col")
+        local children = {}
+        for i = 2, #node do children[#children + 1] = node[i] end
+
+        -- Container padding
+        local pl = eff_pad(s, "left");  local pt = eff_pad(s, "top")
+        local pr = eff_pad(s, "right"); local pb = eff_pad(s, "bottom")
+        local ix = x + pl;  local iy = y + pt
+        local iw = w - pl - pr;  local ih = h - pt - pb
+
+        -- Divide space by weight
+        local total_weight = 0
+        for _, ch in ipairs(children) do
+            total_weight = total_weight + (type(ch) == "table" and ch.weight or 1)
+        end
+        if total_weight == 0 then total_weight = 1 end
+
+        local pos  = (dir == "col") and iy or ix
+        local total_sz = (dir == "col") and ih or iw
+        local used = 0
+        for i, ch in ipairs(children) do
+            local weight = type(ch) == "table" and ch.weight or 1
+            local sz
+            if i == #children then
+                sz = total_sz - used   -- remainder to last child avoids rounding gaps
+            else
+                sz = math.floor(total_sz * weight / total_weight)
+            end
+            if dir == "col" then
+                layout_node(ch, ix, pos, iw, sz, s, ops)
+            else
+                layout_node(ch, pos, iy, sz, ih, s, ops)
+            end
+            pos = pos + sz
+            used = used + sz
+        end
+
+        -- Border around container
+        if s.border.width > 0 then
+            ops[#ops + 1] = {
+                kind      = "border",
+                x=x, y=y, w=w, h=h,
+                thickness = s.border.width,
+                color     = s.border.color,
+                side      = s.border.side,
+            }
+        end
+
+    else
+        -- Leaf node
+        local lbl, render, press
+        local text
+
+        if type(node) == "string" then
+            text = node
+        elseif type(node) == "table" then
+            lbl    = node.lbl
+            render = node.render
+            press  = get_press(node)
+            if not lbl and type(node[1]) == "string"
+               and node[1] ~= "row" and node[1] ~= "col" then
+                text = node[1]
+            end
+        end
+
+        local atlas   = get_atlas(s.font, s.fg, s.bg)
+        local ch_px   = cell_height_est(s.font)
+        local cw_px   = char_width_est(s.font)
+        local text_y  = y + math.floor((h - ch_px) / 2)
+        local pad_chars = math.max(0, math.floor(w / cw_px))
+
+        if lbl then
+            if render == "progress bar" then
+                ops[#ops + 1] = {
+                    kind = "progress",
+                    x=x, y=y, w=w, h=h,
+                    lbl  = lbl,
+                    fg   = s.fg,
+                    bg   = s.bg,
+                }
+            else
+                ops[#ops + 1] = {
+                    kind      = "dynamic",
+                    x=x, y=y, w=w, h=h,
+                    text_x    = x,
+                    text_y    = text_y,
+                    lbl       = lbl,
+                    atlas     = atlas,
+                    pad_chars = pad_chars,
+                    press     = press,
+                }
+            end
+        elseif text then
+            ops[#ops + 1] = {
+                kind   = "static",
+                x=x, y=y, w=w, h=h,
+                text_x = x,
+                text_y = text_y,
+                text   = text,
+                atlas  = atlas,
+                press  = press,
+            }
+        end
+
+        -- Border around leaf
+        if s.border.width > 0 then
+            ops[#ops + 1] = {
+                kind      = "border",
+                x=x, y=y, w=w, h=h,
+                thickness = s.border.width,
+                color     = s.border.color,
+                side      = s.border.side,
+            }
+        end
+    end
+end
+
+-- Compute layout for all menus
+local menu_names = {}
+for name in pairs(menus) do menu_names[#menu_names + 1] = name end
+table.sort(menu_names)
+
+local menu_ops = {}
+for _, name in ipairs(menu_names) do
+    local m = menus[name]
+    local mw = screen.width
+    local mh = screen.height
+    local mx = 0
+    local my = 0
+
+    if m.size then
+        mw = m.size[1]
+        mh = m.size[2]
+        if m.align then
+            local ax = m.align[1]
+            local ay = m.align[2]
+            local anchor = m.anchor or "center"
+            if anchor == "center" then
+                mx = math.floor(ax - mw / 2)
+                my = math.floor(ay - mh / 2)
+            elseif anchor == "top_left" then
+                mx = math.floor(ax)
+                my = math.floor(ay)
+            else
+                io.stderr:write(("WARNING: unknown anchor '%s', using center\n"):format(anchor))
+                mx = math.floor(ax - mw / 2)
+                my = math.floor(ay - mh / 2)
+            end
+        else
+            mx = math.floor((screen.width  - mw) / 2)
+            my = math.floor((screen.height - mh) / 2)
+        end
+    end
+
+    local ops = {}
+    layout_node(m, mx, my, mw, mh, default_style, ops)
+    menu_ops[name] = ops
+end
+
+-------------------------------------------------------------------------------
+-- 6. Emit
+-------------------------------------------------------------------------------
+local out = {}
+local function e(fmt, ...)
+    if select("#", ...) > 0 then
+        out[#out + 1] = fmt:format(...)
+    else
+        out[#out + 1] = fmt
+    end
+end
+
+-- Header
+e("// Generated by scripts/layout.lua — do not edit.")
+e("// Re-run the transpiler to update:")
+e("//   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs")
+e("")
+
+-- Imports
+local need_raster = false
+local need_ttf    = false
+local need_renderer = false
+for _, a in ipairs(atlases) do
+    if is_raster(a.font) then need_raster = true else need_ttf = true end
+end
+for _, ops in pairs(menu_ops) do
+    for _, op in ipairs(ops) do
+        if op.kind == "dynamic" or op.kind == "static" then
+            need_renderer = true; break
+        end
+    end
+end
+
+e("use imgrids::{rgb, Backend, InputEvent%s};",
+    need_renderer and ", Renderer" or "")
+if need_raster then e("use imgrids::raster::RasterAtlas;") end
+if need_ttf    then e("use imgrids::ttf::TtfAtlas;")       end
+if #atlases > 0 then e("use std::sync::OnceLock;") end
+e("")
+
+-- Atlas statics and getters
+for _, a in ipairs(atlases) do
+    if is_raster(a.font) then
+        local name, gw, gh = resolve_raster_font(a.font)
+        e("static %s: OnceLock<RasterAtlas> = OnceLock::new();", a.varname)
+        e("fn %s() -> &'static RasterAtlas {", a.fn_name)
+        e("    %s.get_or_init(|| RasterAtlas::new(", a.varname)
+        e("        &imgrids::fonts::%s::FONT, %d, %d, %s, %s,", name, gw, gh,
+            rgb_lit(a.fg), rgb_lit(a.bg))
+        e("    ))")
+        e("}")
+    else
+        e("static %s: OnceLock<TtfAtlas> = OnceLock::new();", a.varname)
+        e("fn %s() -> &'static TtfAtlas {", a.fn_name)
+        e("    %s.get_or_init(|| TtfAtlas::new(%q, %d, %s, %s)", a.varname,
+            a.font[1], a.font[2], rgb_lit(a.fg), rgb_lit(a.bg))
+        e("        .expect(%q))", a.font[1])
+        e("}")
+    end
+    e("")
+end
+
+-- Menu enum
+e("#[derive(Clone, Copy, PartialEq)]")
+e("pub enum Menu {")
+for _, name in ipairs(menu_names) do
+    e("    %s,", to_pascal(name))
+end
+e("}")
+e("")
+
+-- draw() dispatch
+e("pub fn draw(backend: &mut dyn Backend, menu: Menu) {")
+e("    match menu {")
+for _, name in ipairs(menu_names) do
+    e("        Menu::%s => draw_%s(backend),", to_pascal(name), name)
+end
+e("    }")
+e("}")
+e("")
+
+-- draw_<menu>() per-menu functions
+for _, name in ipairs(menu_names) do
+    e("fn draw_%s(backend: &mut dyn Backend) {", name)
+    e("    backend.fill_rect(0, 0, %d, %d, %s);",
+        screen.width, screen.height, rgb_lit(default_style.bg))
+    for _, op in ipairs(menu_ops[name]) do
+        if op.kind == "static" then
+            e("    %s().draw(backend, %d, %d, %q);",
+                op.atlas.fn_name, op.text_x, op.text_y, op.text)
+        elseif op.kind == "dynamic" or op.kind == "progress" then
+            -- Leave blank; update() will fill on first call
+            local bg = op.atlas and op.atlas.bg or op.bg
+            e("    backend.fill_rect(%d, %d, %d, %d, %s);",
+                op.x, op.y, op.w, op.h, rgb_lit(bg))
+        elseif op.kind == "border" then
+            if op.side then
+                local x, y, w, h, t, c =
+                    op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
+                if     op.side == "top"    then e("    backend.fill_rect(%d, %d, %d, %d, %s);", x,       y,       w, t, c)
+                elseif op.side == "bottom" then e("    backend.fill_rect(%d, %d, %d, %d, %s);", x,       y+h-t,  w, t, c)
+                elseif op.side == "left"   then e("    backend.fill_rect(%d, %d, %d, %d, %s);", x,       y,       t, h, c)
+                elseif op.side == "right"  then e("    backend.fill_rect(%d, %d, %d, %d, %s);", x+w-t,  y,       t, h, c)
+                end
+            else
+                e("    backend.draw_border(%d, %d, %d, %d, %d, %s);",
+                    op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color))
+            end
+        end
+    end
+    e("}")
+    e("")
+end
+
+-- update() dispatch
+e("pub fn update(")
+e("    backend: &mut dyn Backend,")
+e("    menu: Menu,")
+e("    changes: &[(&str, &str)],")
+e("    events: &[InputEvent],")
+e(") -> Option<Menu> {")
+e("    match menu {")
+for _, name in ipairs(menu_names) do
+    e("        Menu::%s => update_%s(backend, changes, events),", to_pascal(name), name)
+end
+e("    }")
+e("}")
+e("")
+
+-- update_<menu>() per-menu functions
+for _, name in ipairs(menu_names) do
+    local ops = menu_ops[name]
+    local dyn_ops   = {}
+    local prog_ops  = {}
+    local press_ops = {}
+    for _, op in ipairs(ops) do
+        if op.kind == "dynamic" then dyn_ops[#dyn_ops + 1] = op end
+        if op.kind == "progress" then prog_ops[#prog_ops + 1] = op end
+        if op.press then press_ops[#press_ops + 1] = op end
+    end
+
+    local ev_param = #press_ops > 0 and "events" or "_events"
+    e("fn update_%s(", name)
+    e("    backend: &mut dyn Backend,")
+    e("    changes: &[(&str, &str)],")
+    e("    %s: &[InputEvent],", ev_param)
+    e(") -> Option<Menu> {")
+
+    -- All dynamic text redraws in one render() closure
+    if #dyn_ops > 0 then
+        e("    backend.render(&mut |fb, stride| {")
+        e("        for &(name, val) in changes {")
+        e("            match name {")
+        for _, op in ipairs(dyn_ops) do
+            e("                %q => %s().blit(fb, stride, %d, %d,",
+                op.lbl, op.atlas.fn_name, op.text_x, op.text_y)
+            e("                    &format!(\"{:<%d}\", val)),", op.pad_chars)
+        end
+        e("                _ => {}")
+        e("            }")
+        e("        }")
+        e("    });")
+    end
+
+    -- Progress bar redraws (direct fill_rect, cannot batch in render())
+    if #prog_ops > 0 then
+        e("    for &(name, val) in changes {")
+        for _, op in ipairs(prog_ops) do
+            e("        if name == %q {", op.lbl)
+            e("            if let Ok(v) = val.parse::<f32>() {")
+            e("                let v = v.clamp(0.0, 1.0);")
+            e("                let filled = (%d_usize as f32 * v) as usize;", op.w)
+            e("                if filled > 0 {")
+            e("                    backend.fill_rect(%d, %d, filled, %d, %s);",
+                op.x, op.y, op.h, rgb_lit(op.fg))
+            e("                }")
+            e("                if filled < %d {", op.w)
+            e("                    backend.fill_rect(%d + filled, %d, %d - filled, %d, %s);",
+                op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+            e("                }")
+            e("            }")
+            e("        }")
+        end
+        e("    }")
+    end
+
+    -- Press hit-testing
+    if #press_ops > 0 then
+        e("    for ev in events {")
+        e("        if let InputEvent::Press { x, y } = ev {")
+        for _, op in ipairs(press_ops) do
+            local fn_name = op.press[1]
+            local args = {}
+            for i = 2, #op.press do
+                args[#args + 1] = ("%q"):format(op.press[i])
+            end
+            -- usize is always >= 0; skip the lower-bound check when it is 0
+            local x_lo = op.x   > 0 and ("*x >= %d && "):format(op.x)   or ""
+            local y_lo = op.y   > 0 and ("*y >= %d && "):format(op.y)   or ""
+            e("            if %s*x < %d && %s*y < %d {",
+                x_lo, op.x + op.w, y_lo, op.y + op.h)
+            e("                if let Some(m) = super::%s(&[%s]) { return Some(m); }",
+                fn_name, table.concat(args, ", "))
+            e("            }")
+        end
+        e("        }")
+        e("    }")
+    end
+
+    -- Suppress unused-variable warnings when a menu has no ops at all
+    if #dyn_ops == 0 and #prog_ops == 0 and #press_ops == 0 then
+        e("    let _ = (backend, changes, %s);", ev_param)
+    end
+
+    e("    None")
+    e("}")
+    e("")
+end
+
+io.write(table.concat(out, "\n"))
+io.write("\n")
