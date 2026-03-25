@@ -86,6 +86,7 @@ impl Backend for WebBackend {
 }
 
 pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
+    unsafe { imgrids_setup_input() };
     Box::new(WebBackend {
         pixels: vec![0; w * h],
         width: w,
@@ -102,7 +103,6 @@ pub fn run(
     mut backend: Box<dyn Backend>,
     mut tick_fn: impl FnMut(&mut dyn Backend),
 ) {
-    unsafe { imgrids_setup_input() };
     loop {
         tick_fn(&mut *backend);
         sleep(0);

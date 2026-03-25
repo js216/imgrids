@@ -133,6 +133,12 @@ pub trait Backend {
     fn poll_events(&mut self) -> &[InputEvent] {
         &[]
     }
+
+    /// Present the completed frame to the display.
+    /// Backends that double-buffer (e.g. SDL2) copy the back-buffer and flip
+    /// here; backends that write directly to the display (framebuffer, web)
+    /// can leave this as the default no-op.
+    fn flush(&mut self) {}
 }
 
 impl Backend for Box<dyn Backend> {
@@ -160,6 +166,9 @@ impl Backend for Box<dyn Backend> {
     }
     fn poll_events(&mut self) -> &[InputEvent] {
         (**self).poll_events()
+    }
+    fn flush(&mut self) {
+        (**self).flush()
     }
 }
 

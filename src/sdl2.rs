@@ -88,6 +88,9 @@ impl Backend for Sdl2Backend {
                 draw_fn(pixels, pixel_stride);
             })
             .expect("texture lock failed");
+    }
+
+    fn flush(&mut self) {
         self.canvas
             .copy(&self.texture, None, None)
             .expect("canvas copy failed");

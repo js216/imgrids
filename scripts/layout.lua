@@ -578,6 +578,7 @@ for _, name in ipairs(menu_names) do
     e("            Menu::%s => draw_%s(backend),", name, name:lower())
 end
 e("        }")
+e("        backend.flush();")
 e("    }")
 e("}")
 e("")
@@ -590,6 +591,7 @@ for _, name in ipairs(menu_names) do
 end
 e("        None => {}")
 e("    }")
+e("    backend.flush();")
 e("}")
 e("")
 

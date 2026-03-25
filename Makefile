@@ -36,7 +36,7 @@ target/armv7-unknown-linux-gnueabihf/release/examples/%-armv7: $(RS)
 target/wasm32-unknown-emscripten/release/examples/%.html: src/sim.html $(RS)
 	CARGO_ENCODED_RUSTFLAGS="$(shell printf '-C\x1flink-args=-sALLOW_MEMORY_GROWTH=1 -sASYNCIFY --embed-file fonts --js-library=src/web.js')" \
 	cargo build --release --example $* --features web,bpp32rgba --target wasm32-unknown-emscripten
-	cp src/sim.html $@
+	sed 's/demo\.js/$*.js/' src/sim.html > $@
 
 clean:
 	rm -rf target
