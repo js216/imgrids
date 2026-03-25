@@ -10,19 +10,21 @@
 --
 -- 2. Layout — recursively compute pixel rects for every cell. All inputs are
 -- known at transpile time (screen.width, screen.height, weight, size, pad,
--- margin). Output is a flat list of {x, y, w, h, content, style, press, arg}
+-- margin). Output is a flat list of {x, y, w, h, content, style, press, args}
 -- records per menu. No layout logic in the generated Rust.
 --
 -- 3. Emit — write the Rust module:
 --
 -- Generated API overview:
 --
---   pub enum Menu { SimpleMenu, ClickableMenu, ... }  -- one variant per menu
+--   pub enum Menu { Simple, Clickable, ... }  -- one variant per menu
+--     Menu names are snake_case in ui.lua; the _menu suffix is stripped and
+--     the remainder converted to PascalCase: simple_menu → Simple.
 --
---   pub fn draw(backend, menu, get_label)
---     Called once when switching to a menu. Draws everything from scratch.
---     get_label: fn(&str) -> &str  maps a label name to its current display
---     string; called once per dynamic cell during the initial draw only.
+--   pub fn draw(backend, menu)
+--     Called once when switching to a menu. Draws static structure (backgrounds,
+--     borders, static text); dynamic cells are left blank. The first update()
+--     call should include all current label values to populate them.
 --
 --   pub fn update(backend, menu, changes, events) -> Option<Menu>
 --     Called every frame. changes: &[(&str, &str)] is a list of (label name,
@@ -34,14 +36,14 @@
 --
 -- Typical app loop:
 --
---   let mut menu = Menu::SimpleMenu;
---   draw(&mut backend, menu, get_label);
+--   let mut menu = Menu::Simple;
+--   draw(&mut backend, menu);
 --   loop {
---       let changes = ...;  -- app computes changed labels
---       let events  = backend.poll_events();
---       if let Some(next) = update(&mut backend, menu, &changes, events) {
+--       let changes = ...;  -- app computes changed labels (full diff on first call)
+--       let events  = backend.poll_events().to_vec(); -- copy before re-borrowing
+--       if let Some(next) = update(&mut backend, menu, &changes, &events) {
 --           menu = next;
---           draw(&mut backend, menu, get_label);
+--           draw(&mut backend, menu);
 --       }
 --       sleep(33);
 --   }
@@ -49,8 +51,6 @@
 -- Implementation notes:
 --
 -- - One static atlas per font/color combo, initialised lazily at first draw.
--- - Per-cell value cache is a static mut array inside each update_<name>()
---   function; single-threaded so no locking needed.
 -- - focused style: the layout pass resolves two full style sets (normal +
 --   focused) per pressable cell; update_<name>() redraws the cell with the
 --   appropriate style when focus changes.
@@ -67,14 +67,13 @@
 --   frame regardless of how many cells changed. Each atlas exposes blit(fb,
 --   stride, x, y, text) for use inside render(); draw(backend, x, y, text) is
 --   a convenience wrapper for single draws (e.g. during initial draw_()).
--- - Label name matching in update() uses integer IDs, not string comparisons.
---   The transpiler assigns a unique u16 to each distinct label name (matching
---   the parameter index returned by param_serv's list() call) and emits
---   changes: &[(u16, &str)]. The app calls list() once at startup to obtain
---   the name→index mapping; thereafter the diff from get() is already
---   &[(u16, &str)] with no string-to-int conversion needed at loop time.
---   Per-frame dispatch inside update() is a match on u16 — the compiler emits
---   a jump table, faster than any strcmp chain.
+-- - Label matching in update() is by string comparison. With a small number
+--   of dynamic labels per menu this is fast enough; no integer caching needed.
+-- - Press callbacks: press = {"fn_name", "arg1", ...} — first element is the
+--   function name, remaining elements are static string arguments baked in at
+--   transpile time. The transpiler emits super::fn_name(&["arg1", ...]).
+--   Callback signature in the app: fn name(args: &[&str]) -> Option<Menu>
+--   Return Some(next) to switch menus, None to stay.
 
 screen = {
    width  = 800,
@@ -117,7 +116,8 @@ style = {
 
    -- In the entire UI exactly zero or one buttons (i.e., widgets with a "press"
    -- attribute defined) can be focused, meaning they have the style defined
-   -- here below. The widget gets focused whenever someone presses on it.
+   -- here below. The widget gets focused whenever someone presses on it. Menus
+   -- do not remember previously focused items.
    focused = {
       border = {
          -- inherit white color, perfectly visible on black background
@@ -139,14 +139,12 @@ menus = {
       font = fonts.roboto, -- key "font" given, so this is an attribute
       "Item Two", -- no key: this is also a child
       "Item One", -- duplication is permitted
-      "More Text", -- text is always vertically centered in its cell
+      "More Text", -- static/dynamic text (also widgets and progress bars etc.) is always vertically centered (horizontally left aligned) in its cell
       -- if there's too many items that fit on the screen it just looks ugly
       -- (we do not provide any clipping or scrolling features)
    },
 
-   -- static vs dynamic labels: Rust code must provide a function which is to
-   -- be called with the string parameter name (lbl="this one!") and returns the
-   -- string with the value formatted as a string
+   -- dynamic labels: value is a string supplied via update() changes
    dyn_stat_menu = {"col",
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label
@@ -156,7 +154,8 @@ menus = {
    widget_menu = {"col",
       "Simple Label", -- plain text label
       {lbl="parameter One"}, -- dynamic label, converted to text
-      {lbl="parameter Two", render="progress bar"}, -- show as progress bar
+      {lbl="parameter Two", render="progress bar"}, -- show as progress bar;
+      -- value string is a float in [0,1] e.g. "0.75"; bar fills cell width.
       -- we can define lots of other kinds of "render" widgets later;
       -- for now, only "progress bar" is defined
    },
@@ -170,7 +169,7 @@ menus = {
    -- popup menu
    popup_menu = {"col", size = {0.50*screen.width, 0.75*screen.height}, -- takes half screen width and 75% height
       align = {0.5 * screen.width, 0.5 * screen.height}, -- where to put the menu (default: 50%/50% = screen center)
-      anchor = "center", -- what `align` is defined with respect to (default = center)
+      anchor = "center", -- what `align` is defined with respect to (default = center, but all other usual anchors supported: top_left, ...)
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four"},
       {"row", "Label Five", "Label Six"},
@@ -179,6 +178,8 @@ menus = {
 
    -- 2x3 grid layout with unequal sizes: "col" layout consists of rows;
    -- weight for a row means vertical weight, for col it means horizontal weight
+   -- default weight is one, so if there's just a single cell in a menu, it takes up
+   -- the entire screen
    unequal_menu = {"col",
       {"row", "Label One", "Label Two"},
       {"row", "Label Three", "Label Four", weight=3}, -- more vertical size than upper row
@@ -203,12 +204,12 @@ menus = {
 
    -- three buttons one above another
    clickable_menu = {"col",
-      {"Click me!", press = "function_cl"}, -- function name is raw string;
-      {"Press me!", press = "function_pr"}, -- it corresponds to a function
-      {"Touch me!", press = "function_to"}, -- defined in a Rust file elsewhere;
-      {"Test!",     press = "fn2", arg="string arg"}, -- pure static string, nothing else
-      {"Test2!",    press = "fn2"}, -- "" if arg missing
-      {lbl="parameter One", press="fn3"}, -- dynamic label that's clicable
+   -- press = {"fn_name", args...}: first element is function name, rest are
+   -- static string args baked at transpile time. Callback: fn(args: &[&str]).
+      {"Click me!", press = {"function_cl"}},           -- zero args: &[]
+      {"Press me!", press = {"function_pr", "hello"}},  -- one arg:  &["hello"]
+      {"Touch me!", press = {"fn_multi", "a", "b"}},    -- two args: &["a", "b"]
+      {lbl="parameter One", press={"fn3"}},             -- dynamic label, clickable
    },
 
    -- more complex grid layout (could be nested to arbitrary depth)
@@ -223,7 +224,7 @@ menus = {
 
    -- any element can have padding (default unit: pixels)
    pad_menu = {"col", pad = 10, -- padding on all sides around the menu
-      {"row", {"Label One", pad_left = 3}, "Label Two"}, -- left padding for one item only
+      {"row", {"Label One", pad_left = 3}, "Label Two"}, -- left padding for one item only (also have: pad_top, pad_right)
       {"row", "Label Three", "Label Four", pad_bottom = 10}, -- bottom padding for the whole row
    },
 

@@ -23,6 +23,10 @@ bpp32rgba = []
 name = "raw"
 path = "examples/raw.rs"
 
+[[example]]
+name = "app"
+path = "examples/app/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
