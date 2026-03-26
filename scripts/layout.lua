@@ -1015,6 +1015,11 @@ e("    }")
 e("}")
 e("")
 
+e("pub fn force_redraw() {")
+e("    *CURRENT_MENU.lock().unwrap() = None;")
+e("}")
+e("")
+
 -- update_changes()
 e("pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {")
 e("    match *CURRENT_MENU.lock().unwrap() {")
