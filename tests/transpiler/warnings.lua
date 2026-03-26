@@ -19,6 +19,9 @@ menus = {
         {"row", "Label", border = {side = "top"}},  -- (4) zero-width border
         {"BadFont", font = fonts.bad},      -- (1) unknown raster font used
         {"Big margin", margin = 500},       -- (5) margin exceeds available size
+        {"bad node key", blah = 1},       -- (7) unknown key in node
+        {"bad style key", style = {size = 60}},  -- (8) unknown key in style=
+        {"bad border key", border = {width = 1, radius = 5}}, -- (9) unknown key in border=
     },
     -- (6) text exceeds screen bounds: tall fixed child leaves only 10px
     -- for the last child, but the 16px font can't fit, overflows screen

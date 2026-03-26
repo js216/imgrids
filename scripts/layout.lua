@@ -138,11 +138,15 @@ local default_style = {
 	fg = style.normal.fg,
 	bg = style.normal.bg,
 	pad = style.normal.pad or 0,
-	pad_left = nil,
-	pad_top = nil,
-	pad_right = nil,
-	pad_bottom = nil,
+	pad_left = style.normal.pad_left,
+	pad_top = style.normal.pad_top,
+	pad_right = style.normal.pad_right,
+	pad_bottom = style.normal.pad_bottom,
 	margin = style.normal.margin or 0,
+	margin_left = style.normal.margin_left,
+	margin_top = style.normal.margin_top,
+	margin_right = style.normal.margin_right,
+	margin_bottom = style.normal.margin_bottom,
 	border = make_border(style.normal.border),
 }
 
@@ -159,6 +163,10 @@ local function copy_style(s)
 		pad_right = s.pad_right,
 		pad_bottom = s.pad_bottom,
 		margin = s.margin,
+		margin_left = s.margin_left,
+		margin_top = s.margin_top,
+		margin_right = s.margin_right,
+		margin_bottom = s.margin_bottom,
 		border = {
 			width = s.border.width,
 			color = { s.border.color[1], s.border.color[2], s.border.color[3] },
@@ -167,13 +175,55 @@ local function copy_style(s)
 	}
 end
 
+-- Valid keys per context (string keys only; integer keys are children)
+local STYLE_KEYS = {
+	font=1, fg=1, bg=1, pad=1, pad_left=1, pad_top=1, pad_right=1, pad_bottom=1,
+	margin=1, margin_left=1, margin_top=1, margin_right=1, margin_bottom=1,
+	border=1, align=1,
+}
+local BORDER_KEYS = { width=1, color=1, side=1 }
+local NODE_KEYS = {
+	-- layout
+	size=1, weight=1,
+	-- behavior
+	press=1, focusable=1, lbl=1, render=1, align=1,
+	-- style (inline or via table)
+	style=1, leaf_style=1,
+	-- visual (when not using style= table)
+	font=1, fg=1, bg=1, pad=1, pad_left=1, pad_top=1, pad_right=1, pad_bottom=1,
+	margin=1, margin_left=1, margin_top=1, margin_right=1, margin_bottom=1,
+	border=1,
+	-- menu-level (on root container)
+	menu_size=1, menu_align=1, menu_anchor=1,
+}
+local MENU_KEYS = {
+	menu_size=1, menu_align=1, menu_anchor=1,
+	-- containers also accept node keys
+	style=1, leaf_style=1, border=1,
+	font=1, fg=1, bg=1, pad=1, pad_left=1, pad_top=1, pad_right=1, pad_bottom=1,
+	margin=1, margin_left=1, margin_top=1, margin_right=1, margin_bottom=1,
+}
+
+local function check_keys(tbl, valid, context)
+	if type(tbl) ~= "table" then return end
+	for k, _ in pairs(tbl) do
+		if type(k) == "string" and not valid[k] then
+			warn("unknown key '%s' in %s", k, context)
+		end
+	end
+end
+
 local function merge_style(base, node)
 	local s = copy_style(base)
 	if type(node) ~= "table" then
 		return s
 	end
 	-- Style properties live under node.style if present; otherwise flat on node.
-	node = node.style or node
+	local style_tbl = node.style
+	node = style_tbl or node
+	if style_tbl then
+		check_keys(style_tbl, STYLE_KEYS, "style=")
+	end
 	if node.font then
 		if type(node.font) ~= "table" or not node.font[1] then
 			error("font must be a {path, size} table, got: " .. tostring(node.font), 2)
@@ -204,7 +254,20 @@ local function merge_style(base, node)
 	if node.margin then
 		s.margin = node.margin
 	end
+	if node.margin_left then
+		s.margin_left = node.margin_left
+	end
+	if node.margin_top then
+		s.margin_top = node.margin_top
+	end
+	if node.margin_right then
+		s.margin_right = node.margin_right
+	end
+	if node.margin_bottom then
+		s.margin_bottom = node.margin_bottom
+	end
 	if node.border then
+		check_keys(node.border, BORDER_KEYS, "border=")
 		if node.border.width ~= nil then
 			s.border.width = node.border.width
 		end
@@ -219,6 +282,14 @@ local function merge_style(base, node)
 		end
 	end
 	return s
+end
+
+local function eff_margin(s, side)
+	if side == "left" then return s.margin_left or s.margin end
+	if side == "top" then return s.margin_top or s.margin end
+	if side == "right" then return s.margin_right or s.margin end
+	if side == "bottom" then return s.margin_bottom or s.margin end
+	return s.margin
 end
 
 local function eff_pad(s, side)
@@ -319,6 +390,14 @@ end
 
 local current_menu_name  -- set before each layout_node call
 local function layout_node(node, x, y, w, h, ops, leaf_style)
+	-- Validate keys on table nodes
+	if type(node) == "table" then
+		check_keys(node, NODE_KEYS, "node")
+		if node.leaf_style then
+			check_keys(node.leaf_style, STYLE_KEYS, "leaf_style=")
+		end
+	end
+
 	-- Style: default_style → leaf_style (inherited) → node's own style.
 	-- leaf_style propagates from ancestor containers to all descendant leaves.
 	local s
@@ -329,17 +408,19 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 	end
 
 	-- Apply margin (containers only use margin when explicitly set on node)
-	local mx = s.margin
+	local ml, mt, mr, mb = eff_margin(s,"left"), eff_margin(s,"top"), eff_margin(s,"right"), eff_margin(s,"bottom")
 	if is_container(node) then
 		local src = type(node) == "table" and (node.style or node) or nil
-		if not (src and src.margin) then mx = 0 end
+		if not (src and (src.margin or src.margin_left or src.margin_top or src.margin_right or src.margin_bottom)) then
+			ml, mt, mr, mb = 0, 0, 0, 0
+		end
 	end
-	x = x + mx
-	y = y + mx
-	w = w - 2 * mx
-	h = h - 2 * mx
+	x = x + ml
+	y = y + mt
+	w = w - ml - mr
+	h = h - mt - mb
 	if w < 0 or h < 0 then
-		warn("margin=%d exceeds available size, cell clipped to zero", mx)
+		warn("margin exceeds available size, cell clipped to zero")
 		w = math.max(0, w)
 		h = math.max(0, h)
 	end
@@ -702,6 +783,7 @@ for _, name in ipairs(menu_names) do
 
 	local ops = {}
 	current_menu_name = name
+	check_keys(m, MENU_KEYS, "menu " .. name)
 	layout_node(m, mx, my, mw, mh, ops)
 	menu_ops[name] = ops
 end
