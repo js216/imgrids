@@ -16,14 +16,16 @@ colors = {
 }
 
 fonts = {
-	roboto = { "fonts/RobotoMono-Regular.ttf", 32 },
-	small = { "fonts/RobotoMono-Regular.ttf", 20 },
+	myriad_large = { "fonts/MyriadPro-Regular.ttf", 32 },
+	myriad_small = { "fonts/MyriadPro-Regular.ttf", 20 },
+	roboto_large = { "fonts/RobotoMono-Regular.ttf", 32 },
+	roboto_small = { "fonts/RobotoMono-Regular.ttf", 20 },
 	vga = { "raster::font_vga16", 12 },
 }
 
 style = {
 	normal = {
-		font = fonts.roboto,
+		font = fonts.myriad_large,
 		fg = colors.white,
 		bg = colors.black,
 		margin = 0,
@@ -36,9 +38,9 @@ style = {
 }
 
 -- Reusable style tables
-local s_title = { bg = {60, 60, 60}, fg = colors.white, font = fonts.small,
+local s_title = { bg = {60, 60, 60}, fg = colors.white, font = fonts.myriad_small,
                   border = {width = 0}, pad = 0, margin = 0, pad_left = 10 }
-local s_desc  = { bg = colors.black, fg = colors.white, font = fonts.small,
+local s_desc  = { bg = colors.black, fg = colors.white, font = fonts.myriad_small,
                   border = {width = 0}, pad = 4, margin = 0, pad_left = 10 }
 local s_btn   = { bg = {30, 80, 180}, border = {width = 2, color = colors.white}, margin = 4 }
 local s_gap   = { border = {width = 0} }
@@ -60,7 +62,7 @@ menus = {
    Hello = {"col",
       {"Col Layout",                                        size = 40, style = s_title},
       {"col stacks children vertically.\nEach child gets equal height.", size = 50, style = s_desc},
-      nav("Alignment", "Rows"),
+      nav("Popup", "Rows"),
       {"First",  style = {bg = {60,  60,  120}}},
       {"Second", style = {bg = {60,  120, 60 }}},
       {"Third",  style = {bg = {120, 60,  60 }}},
@@ -207,7 +209,7 @@ menus = {
    Complex = {"col",
       {"Nested Containers",                                 size = 40, style = s_title},
       {"Containers nest freely:\ncol in row, row in col...", size = 50, style = s_desc},
-      nav("Progress", "Popup"),
+      nav("Progress", "Alignment"),
       {"row",
          {"col", "Top-left", "Bottom-left"},
          {"col",
@@ -220,7 +222,7 @@ menus = {
    Alignment = {"col",
       {"Text Alignment",                                    size = 40, style = s_title},
       {"align= positions text within its cell.\nleft (default), center, right.", size = 50, style = s_desc},
-      nav("Popup", "Hello"),
+      nav("Complex", "Popup"),
          {"Left (default)"},
          {"Centered", align = "center"},
          {"Right aligned", align = "right"},
@@ -230,8 +232,9 @@ menus = {
       menu_size  = {math.floor(0.5 * screen.width), math.floor(0.7 * screen.height)},
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
+      border = {width = 2, color = colors.white},
       {"Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("Complex", "Alignment"),
+      nav("Alignment", "Hello"),
    },
 }

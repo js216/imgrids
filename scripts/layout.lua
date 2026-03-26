@@ -108,6 +108,10 @@ local function make_border(b)
 	}
 end
 
+if not style.normal.font then
+	io.stderr:write("ERROR: style.normal.font is nil (undefined font?)\n")
+	os.exit(1)
+end
 local default_style = {
 	font = style.normal.font,
 	fg = style.normal.fg,
@@ -150,6 +154,9 @@ local function merge_style(base, node)
 	-- Style properties live under node.style if present; otherwise flat on node.
 	node = node.style or node
 	if node.font then
+		if type(node.font) ~= "table" or not node.font[1] then
+			error("font must be a {path, size} table, got: " .. tostring(node.font), 2)
+		end
 		s.font = node.font
 	end
 	if node.fg then
@@ -235,10 +242,21 @@ local function atlas_key(font, fg, bg)
 	end
 end
 
+local checked_fonts = {}
 local function get_atlas(font, fg, bg)
 	local k = atlas_key(font, fg, bg)
 	if atlas_map[k] then
 		return atlas_map[k]
+	end
+	-- Check font file exists (once per path)
+	if not is_raster(font) and not checked_fonts[font[1]] then
+		checked_fonts[font[1]] = true
+		local f = io.open(font[1], "r")
+		if f then
+			f:close()
+		else
+			warn("font file not found: %s", font[1])
+		end
 	end
 	local idx = #atlases + 1
 	local rec = {
