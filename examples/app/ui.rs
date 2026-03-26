@@ -2,7 +2,7 @@
 // Re-run the transpiler to update:
 //   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
 // transpiler: 30305840f2a449c4479d52caf42a00886d53df3e763f75b38f6a31a0313cc02d
-// input:      905947c39cb0e6161037b8e20457585f6318f6ba713b20cbe2c4e34c6fb982d0
+// input:      6f77cf35f88bbdee743490d00ad7d1163065e5aad272aacf7e81c713f6fb6fda
 
 use imgrids::{rgb, Backend, InputEvent, Renderer};
 use imgrids::ttf::TtfAtlas;
@@ -72,6 +72,18 @@ fn atlas_10() -> &'static TtfAtlas {
 static ATLAS_11: OnceLock<TtfAtlas> = OnceLock::new();
 fn atlas_11() -> &'static TtfAtlas {
     ATLAS_11.get_or_init(|| TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(0, 255, 0))
+        .expect("fonts/MyriadPro-Regular.ttf"))
+}
+
+static ATLAS_12: OnceLock<TtfAtlas> = OnceLock::new();
+fn atlas_12() -> &'static TtfAtlas {
+    ATLAS_12.get_or_init(|| TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(40, 40, 80))
+        .expect("fonts/MyriadPro-Regular.ttf"))
+}
+
+static ATLAS_13: OnceLock<TtfAtlas> = OnceLock::new();
+fn atlas_13() -> &'static TtfAtlas {
+    ATLAS_13.get_or_init(|| TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(40, 80, 40))
         .expect("fonts/MyriadPro-Regular.ttf"))
 }
 
@@ -556,23 +568,23 @@ fn draw_pad(backend: &mut dyn Backend) {
     backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
     atlas_4().draw(backend, 516, 104, "Next");
     backend.draw_border(504, 94, 192, 52, 2, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 6, 216, "pad=5");
+    backend.fill_rect(0, 150, 266, 165, rgb!(40, 40, 80));
+    atlas_12().draw(backend, 6, 216, "pad=5");
     backend.draw_border(0, 150, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 282, 216, "pad=15");
+    backend.fill_rect(266, 150, 266, 165, rgb!(40, 40, 80));
+    atlas_12().draw(backend, 282, 216, "pad=15");
     backend.draw_border(266, 150, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 268, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 563, 216, "pad_left=30");
+    backend.fill_rect(532, 150, 268, 165, rgb!(40, 40, 80));
+    atlas_12().draw(backend, 563, 216, "pad_left=30");
     backend.draw_border(532, 150, 268, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 315, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 11, 386, "pad_top=20");
+    backend.fill_rect(0, 315, 266, 165, rgb!(40, 80, 40));
+    atlas_13().draw(backend, 11, 386, "pad_top=20");
     backend.draw_border(0, 315, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 315, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 277, 381, "pad_right=20");
+    backend.fill_rect(266, 315, 266, 165, rgb!(40, 80, 40));
+    atlas_13().draw(backend, 277, 381, "pad_right=20");
     backend.draw_border(266, 315, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 315, 268, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 543, 376, "pad_bottom=20");
+    backend.fill_rect(532, 315, 268, 165, rgb!(40, 80, 40));
+    atlas_13().draw(backend, 543, 376, "pad_bottom=20");
     backend.draw_border(532, 315, 268, 165, 1, rgb!(255, 255, 255));
 }
 
