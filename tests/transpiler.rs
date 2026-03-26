@@ -41,3 +41,17 @@ fn error_bad_menu_name_exits_immediately() {
     assert_ne!(rc, 0, "test.lua must exit nonzero");
     assert_eq!(stderr, expected_stderr("test"));
 }
+
+#[test]
+fn error_undefined_color() {
+    let (rc, _stdout, stderr) = run("tests/transpiler/bad_color.lua");
+    assert_ne!(rc, 0, "bad_color.lua must exit nonzero");
+    assert_eq!(stderr, expected_stderr("bad_color"));
+}
+
+#[test]
+fn error_undefined_font() {
+    let (rc, _stdout, stderr) = run("tests/transpiler/bad_font.lua");
+    assert_ne!(rc, 0, "bad_font.lua must exit nonzero");
+    assert_eq!(stderr, expected_stderr("bad_font"));
+}

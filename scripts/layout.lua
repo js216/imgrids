@@ -11,7 +11,28 @@ if not chunk then
 	io.stderr:write("ERROR: " .. tostring(err) .. "\n")
 	os.exit(1)
 end
+-- Inject strict metatables so that accessing an undefined key on
+-- colors or fonts (e.g. colors.gren) errors immediately during chunk().
+local function _strict_mt(name)
+	return {__index = function(_, k)
+		io.stderr:write(("ERROR: %s.%s is not defined\n"):format(name, tostring(k)))
+		os.exit(1)
+	end}
+end
+-- Pre-create globals so user code populates them; we intercept the
+-- assignment via a global metatable that auto-applies strictness.
+local _orig_globals_mt = getmetatable(_G)
+setmetatable(_G, {
+	__newindex = function(t, k, v)
+		rawset(t, k, v)
+		if (k == "colors" or k == "fonts") and type(v) == "table" then
+			setmetatable(v, _strict_mt(k))
+		end
+	end,
+	__index = _orig_globals_mt and _orig_globals_mt.__index or nil,
+})
 chunk()
+setmetatable(_G, _orig_globals_mt)
 
 local warn_count = 0
 local function warn(fmt, ...)
@@ -297,9 +318,15 @@ local function get_press(node)
 end
 
 local current_menu_name  -- set before each layout_node call
-local function layout_node(node, x, y, w, h, ops)
-	-- Style never propagates from parent to child; each node starts from default_style.
-	local s = merge_style(default_style, node)
+local function layout_node(node, x, y, w, h, ops, leaf_style)
+	-- Style: default_style → leaf_style (inherited) → node's own style.
+	-- leaf_style propagates from ancestor containers to all descendant leaves.
+	local s
+	if leaf_style and not is_container(node) then
+		s = merge_style(merge_style(default_style, leaf_style), node)
+	else
+		s = merge_style(default_style, node)
+	end
 
 	-- Apply margin (containers only use margin when explicitly set on node)
 	local mx = s.margin
@@ -319,6 +346,29 @@ local function layout_node(node, x, y, w, h, ops)
 
 	if is_container(node) then
 		local dir = node[1]
+
+		-- Combine inherited leaf_style with this container's own leaf_style
+		local child_leaf_style = leaf_style
+		if node.leaf_style then
+			if child_leaf_style then
+				-- Shallow merge: child overrides parent
+				child_leaf_style = {}
+				for k, v in pairs(leaf_style) do child_leaf_style[k] = v end
+				for k, v in pairs(node.leaf_style) do child_leaf_style[k] = v end
+			else
+				child_leaf_style = node.leaf_style
+			end
+		end
+
+		-- Background fill for container (only when bg explicitly set on this node)
+		local src_bg = type(node) == "table" and (node.style or node) or nil
+		if src_bg and src_bg.bg then
+			ops[#ops + 1] = {
+				kind = "fill",
+				x = x, y = y, w = w, h = h,
+				color = s.bg,
+			}
+		end
 
 		-- Collect integer-keyed children (skip [1] which is "row"/"col")
 		local children = {}
@@ -386,9 +436,9 @@ local function layout_node(node, x, y, w, h, ops)
 				end
 			end
 			if dir == "col" then
-				layout_node(ch, ix, pos, iw, sz, ops)
+				layout_node(ch, ix, pos, iw, sz, ops, child_leaf_style)
 			else
-				layout_node(ch, pos, iy, sz, ih, ops)
+				layout_node(ch, pos, iy, sz, ih, ops, child_leaf_style)
 			end
 			pos = pos + sz
 		end
@@ -908,6 +958,8 @@ for _, name in ipairs(menu_names) do
 		elseif op.kind == "dynamic" or op.kind == "progress" then
 			local bg = op.atlas and op.atlas.bg or op.bg
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
+		elseif op.kind == "fill" then
+			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.color))
 		elseif op.kind == "border" then
 			if op.side then
 				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
