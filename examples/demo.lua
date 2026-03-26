@@ -58,7 +58,7 @@ end
 menus = {
 
    Hello = {"col",
-      {"col layout",                                        size = 40, style = s_title},
+      {"Col Layout",                                        size = 40, style = s_title},
       {"col stacks children vertically.\nEach child gets equal height.", size = 50, style = s_desc},
       nav("Alignment", "Rows"),
       {"First",  style = {bg = {60,  60,  120}}},
@@ -67,7 +67,7 @@ menus = {
    },
 
    Rows = {"col",
-      {"row layout",                                        size = 40, style = s_title},
+      {"Row Layout",                                        size = 40, style = s_title},
       {"row places children side by side.\n(equal width by default)", size = 50, style = s_desc},
       nav("Hello", "Cols"),
       {"row", "Left", "Center", "Right"},
@@ -75,7 +75,7 @@ menus = {
    },
 
    Cols = {"col",
-      {"col + row nesting",                                 size = 40, style = s_title},
+      {"Col + Row Nesting",                                 size = 40, style = s_title},
       {"col inside a row:\neach column stacks its own children.", size = 50, style = s_desc},
       nav("Rows", "Weighted"),
       {"row",
@@ -86,14 +86,14 @@ menus = {
    },
 
    Weighted = {"col",
-      {"weight=",                                           size = 40, style = s_title},
+      {"Proportional Weights",                               size = 40, style = s_title},
       {"weight= sets proportional space.\nDefault weight is 1.", size = 50, style = s_desc},
       nav("Cols", "Fixed"),
       {"row", "weight 1", {"weight 2", weight=2}, {"weight 3", weight=3}},
    },
 
    Fixed = {"col",
-      {"size= (fixed)",                                     size = 40, style = s_title},
+      {"Fixed Sizes",                                       size = 40, style = s_title},
       {"size= gives a child a fixed pixel size.\nWeighted children share the rest.", size = 50, style = s_desc},
       nav("Weighted", "CellStyle"),
       {"size=70 (fixed)",     size = 70},
@@ -101,7 +101,7 @@ menus = {
    },
 
    CellStyle = {"col",
-      {"style=",                                            size = 40, style = s_title},
+      {"Cell Styling",                                      size = 40, style = s_title},
       {"Each cell carries a style= table.\nReuse named tables to share style.", size = 50, style = s_desc},
       nav("Fixed", "Pad"),
       {"row",
@@ -113,7 +113,7 @@ menus = {
    },
 
    Pad = {"col",
-      {"pad=",                                              size = 40, style = s_title},
+      {"Padding",                                           size = 40, style = s_title},
       {"pad= adds internal space.\npad_left/top/right/bottom: per-side.", size = 50, style = s_desc},
       nav("CellStyle", "Margin"),
       {"row",
@@ -129,7 +129,7 @@ menus = {
    },
 
    Margin = {"col",
-      {"margin=",                                           size = 40, style = s_title},
+      {"Margins",                                           size = 40, style = s_title},
       {"margin= shrinks a child from outside.\n(all four sides equally)", size = 50, style = s_desc},
       nav("Pad", "Borders"),
       {"row",
@@ -141,7 +141,7 @@ menus = {
 
    Borders = {"col",
       border = {width = 0},  -- reset so the demos below are unambiguous
-      {"border=",                                           size = 40, style = s_title},
+      {"Borders",                                           size = 40, style = s_title},
       {"border= draws a border.\nside= restricts to one edge.", size = 50, style = s_desc},
       nav("Margin", "Clickable"),
       {"row", "no border", "no border", "no border"},
@@ -156,7 +156,7 @@ menus = {
    },
 
    Clickable = {"col",
-      {"press= callbacks",                                  size = 40, style = s_title},
+      {"Press Callbacks",                                   size = 40, style = s_title},
       {"press={fn, args...} triggers\na Callbacks method on press.", size = 50, style = s_desc},
       nav("Borders", "Focusable"),
       {'press={"click"}',          press = {"click"}},
@@ -165,7 +165,7 @@ menus = {
    },
 
    Focusable = {"col",
-      {"focusable=",                                        size = 40, style = s_title},
+      {"Focus Behavior",                                    size = 40, style = s_title},
       {"Focused cell redraws with style.focused.\nDefault: focusable iff press= is set.", size = 50, style = s_desc},
       nav("Clickable", "Dynamic"),
       {"row",
@@ -183,7 +183,7 @@ menus = {
    },
 
    Dynamic = {"col",
-      {"dynamic labels",                                    size = 40, style = s_title},
+      {"Dynamic Labels",                                    size = 40, style = s_title},
       {"lbl= cells get values via update_changes().\nThey start blank; populate on first update.", size = 50, style = s_desc},
       nav("Focusable", "Progress"),
       {lbl = "parameter One"},
@@ -191,7 +191,7 @@ menus = {
    },
 
    Progress = {"col",
-      {"progress bar",                                      size = 40, style = s_title},
+      {"Progress Bar",                                      size = 40, style = s_title},
       {'render="progress bar":\nlbl= value is a float in [0,1].', size = 50, style = s_desc},
       nav("Dynamic", "Complex"),
       {lbl = "parameter One", render = "progress bar", style={pad=0}},
@@ -205,7 +205,7 @@ menus = {
    },
 
    Complex = {"col",
-      {"nested containers",                                 size = 40, style = s_title},
+      {"Nested Containers",                                 size = 40, style = s_title},
       {"Containers nest freely:\ncol in row, row in col...", size = 50, style = s_desc},
       nav("Progress", "Popup"),
       {"row",
@@ -217,28 +217,21 @@ menus = {
       },
    },
 
+   Alignment = {"col",
+      {"Text Alignment",                                    size = 40, style = s_title},
+      {"align= positions text within its cell.\nleft (default), center, right.", size = 50, style = s_desc},
+      nav("Popup", "Hello"),
+         {"Left (default)"},
+         {"Centered", align = "center"},
+         {"Right aligned", align = "right"},
+   },
+
    Popup = {"col",
       menu_size  = {math.floor(0.5 * screen.width), math.floor(0.7 * screen.height)},
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
-      {"popup / aligned",                                   size = 40, style = s_title},
+      {"Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
       nav("Complex", "Alignment"),
-   },
-
-   Alignment = {"col",
-      {"text alignment",                                    size = 40, style = s_title},
-      {"align= positions text within its cell.\nleft (default), center, right.", size = 50, style = s_desc},
-      nav("Popup", "Hello"),
-      {"row",
-         {"Left (default)"},
-         {"Centered", align = "center"},
-         {"Right aligned", align = "right"},
-      },
-      {"row",
-         {"Left line 1\nLeft line 2"},
-         {"Center line 1\nCenter line 2", align = "center"},
-         {"Right line 1\nRight line 2", align = "right"},
-      },
    },
 }

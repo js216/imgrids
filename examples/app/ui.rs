@@ -2,7 +2,7 @@
 // Re-run the transpiler to update:
 //   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
 // transpiler: 80ad47bb71b4eae1340096e80d509f0acdec86f0eed1fd369fd88ba8b74e5b49
-// input:      e1501aeb3196d1fae6790156bf5838ce10b438fe2bcaf34dca228f60603bc315
+// input:      8ed797f852f7c8acd5c019f899432d168306b10fe34b0c5b814faedb6ab12edf
 
 use imgrids::{rgb, Backend, InputEvent, Renderer};
 use imgrids::ttf::TtfAtlas;
@@ -216,7 +216,7 @@ pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
 fn draw_alignment(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "text alignment");
+    atlas_1().draw(backend, 10, 10, "Text Alignment");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "align= positions text within its cell.");
     atlas_2().draw(backend, 10, 66, "left (default), center, right.");
@@ -226,33 +226,21 @@ fn draw_alignment(backend: &mut dyn Backend) {
     backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
     atlas_4().draw(backend, 516, 104, "Next");
     backend.draw_border(504, 94, 192, 52, 2, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 11, 216, "Left (default)");
-    backend.draw_border(0, 150, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 331, 216, "Centered");
-    backend.draw_border(266, 150, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 268, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 568, 216, "Right aligned");
-    backend.draw_border(532, 150, 268, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 315, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 11, 364, "Left line 1");
-    atlas_3().draw(backend, 11, 398, "Left line 2");
-    backend.draw_border(0, 315, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 315, 266, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 288, 364, "Center line 1");
-    atlas_3().draw(backend, 288, 398, "Center line 2");
-    backend.draw_border(266, 315, 266, 165, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 315, 268, 165, rgb!(0, 0, 0));
-    atlas_3().draw(backend, 585, 364, "Right line 1");
-    atlas_3().draw(backend, 585, 398, "Right line 2");
-    backend.draw_border(532, 315, 268, 165, 1, rgb!(255, 255, 255));
+    backend.fill_rect(0, 150, 800, 110, rgb!(0, 0, 0));
+    atlas_3().draw(backend, 11, 189, "Left (default)");
+    backend.draw_border(0, 150, 800, 110, 1, rgb!(255, 255, 255));
+    backend.fill_rect(0, 260, 800, 110, rgb!(0, 0, 0));
+    atlas_3().draw(backend, 332, 299, "Centered");
+    backend.draw_border(0, 260, 800, 110, 1, rgb!(255, 255, 255));
+    backend.fill_rect(0, 370, 800, 110, rgb!(0, 0, 0));
+    atlas_3().draw(backend, 568, 409, "Right aligned");
+    backend.draw_border(0, 370, 800, 110, 1, rgb!(255, 255, 255));
 }
 
 fn draw_borders(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "border=");
+    atlas_1().draw(backend, 10, 10, "Borders");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "border= draws a border.");
     atlas_2().draw(backend, 10, 66, "side= restricts to one edge.");
@@ -302,7 +290,7 @@ fn draw_borders(backend: &mut dyn Backend) {
 fn draw_cellstyle(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "style=");
+    atlas_1().draw(backend, 10, 10, "Cell Styling");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "Each cell carries a style= table.");
     atlas_2().draw(backend, 10, 66, "Reuse named tables to share style.");
@@ -329,7 +317,7 @@ fn draw_cellstyle(backend: &mut dyn Backend) {
 fn draw_clickable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "press= callbacks");
+    atlas_1().draw(backend, 10, 10, "Press Callbacks");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "press={fn, args...} triggers");
     atlas_2().draw(backend, 10, 66, "a Callbacks method on press.");
@@ -353,7 +341,7 @@ fn draw_clickable(backend: &mut dyn Backend) {
 fn draw_cols(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "col + row nesting");
+    atlas_1().draw(backend, 10, 10, "Col + Row Nesting");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "col inside a row:");
     atlas_2().draw(backend, 10, 66, "each column stacks its own children.");
@@ -395,7 +383,7 @@ fn draw_cols(backend: &mut dyn Backend) {
 fn draw_complex(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "nested containers");
+    atlas_1().draw(backend, 10, 10, "Nested Containers");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "Containers nest freely:");
     atlas_2().draw(backend, 10, 66, "col in row, row in col...");
@@ -431,7 +419,7 @@ fn draw_complex(backend: &mut dyn Backend) {
 fn draw_dynamic(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "dynamic labels");
+    atlas_1().draw(backend, 10, 10, "Dynamic Labels");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "lbl= cells get values via update_changes().");
     atlas_2().draw(backend, 10, 66, "They start blank; populate on first update.");
@@ -450,7 +438,7 @@ fn draw_dynamic(backend: &mut dyn Backend) {
 fn draw_fixed(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "size= (fixed)");
+    atlas_1().draw(backend, 10, 10, "Fixed Sizes");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "size= gives a child a fixed pixel size.");
     atlas_2().draw(backend, 10, 66, "Weighted children share the rest.");
@@ -471,7 +459,7 @@ fn draw_fixed(backend: &mut dyn Backend) {
 fn draw_focusable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "focusable=");
+    atlas_1().draw(backend, 10, 10, "Focus Behavior");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "Focused cell redraws with style.focused.");
     atlas_2().draw(backend, 10, 66, "Default: focusable iff press= is set.");
@@ -510,7 +498,7 @@ fn draw_focusable(backend: &mut dyn Backend) {
 fn draw_hello(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "col layout");
+    atlas_1().draw(backend, 10, 10, "Col Layout");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "col stacks children vertically.");
     atlas_2().draw(backend, 10, 66, "Each child gets equal height.");
@@ -534,7 +522,7 @@ fn draw_hello(backend: &mut dyn Backend) {
 fn draw_margin(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "margin=");
+    atlas_1().draw(backend, 10, 10, "Margins");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "margin= shrinks a child from outside.");
     atlas_2().draw(backend, 10, 66, "(all four sides equally)");
@@ -558,7 +546,7 @@ fn draw_margin(backend: &mut dyn Backend) {
 fn draw_pad(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "pad=");
+    atlas_1().draw(backend, 10, 10, "Padding");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "pad= adds internal space.");
     atlas_2().draw(backend, 10, 66, "pad_left/top/right/bottom: per-side.");
@@ -591,7 +579,7 @@ fn draw_pad(backend: &mut dyn Backend) {
 fn draw_popup(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(200, 72, 400, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 210, 82, "popup / aligned");
+    atlas_1().draw(backend, 210, 82, "Popup Positioning");
     backend.fill_rect(200, 112, 400, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 210, 116, "menu_size={w,h}: menu size in pixels.");
     atlas_2().draw(backend, 210, 138, "menu_align={x,y}+menu_anchor=: position.");
@@ -606,7 +594,7 @@ fn draw_popup(backend: &mut dyn Backend) {
 fn draw_progress(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "progress bar");
+    atlas_1().draw(backend, 10, 10, "Progress Bar");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "render=\"progress bar\":");
     atlas_2().draw(backend, 10, 66, "lbl= value is a float in [0,1].");
@@ -629,7 +617,7 @@ fn draw_progress(backend: &mut dyn Backend) {
 fn draw_rows(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "row layout");
+    atlas_1().draw(backend, 10, 10, "Row Layout");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "row places children side by side.");
     atlas_2().draw(backend, 10, 66, "(equal width by default)");
@@ -665,7 +653,7 @@ fn draw_rows(backend: &mut dyn Backend) {
 fn draw_weighted(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    atlas_1().draw(backend, 10, 10, "weight=");
+    atlas_1().draw(backend, 10, 10, "Proportional Weights");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     atlas_2().draw(backend, 10, 44, "weight= sets proportional space.");
     atlas_2().draw(backend, 10, 66, "Default weight is 1.");
