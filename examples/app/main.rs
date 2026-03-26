@@ -30,7 +30,7 @@ fn current_values(t: f32) -> [(&'static str, String); 2] {
 
 fn main() {
     let mut backend = imgrids::init(800, 480);
-    let mut state = GuiState { menu: ui::Menu::Clickable, quit: false, t: 0.0 };
+    let mut state = GuiState { menu: ui::Menu::Simple, quit: false, t: 0.0 };
 
     loop {
         let raw = current_values(state.t);

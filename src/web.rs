@@ -39,7 +39,11 @@ impl Backend for WebBackend {
         h: usize,
         color: Pixel,
     ) {
-        for row in y..y + h {
+        let x_end = (x + w).min(self.width);
+        let y_end = (y + h).min(self.height);
+        if x >= x_end || y >= y_end { return; }
+        let w = x_end - x;
+        for row in y..y_end {
             let start = row * self.width + x;
             self.pixels[start..start + w].fill(color);
         }
@@ -47,6 +51,9 @@ impl Backend for WebBackend {
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
         draw_fn(&mut self.pixels, self.width);
+    }
+
+    fn flush(&mut self) {
         unsafe {
             imgrids_blit(
                 self.pixels.as_ptr() as *const u8,

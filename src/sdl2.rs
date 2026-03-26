@@ -67,8 +67,12 @@ impl Backend for Sdl2Backend {
         h: usize,
         color: Pixel,
     ) {
+        let x_end = (x + w).min(self.width);
+        let y_end = (y + h).min(self.height);
+        if x >= x_end || y >= y_end { return; }
+        let w = x_end - x;
         self.render(&mut |pixels, stride| {
-            for row in y..y + h {
+            for row in y..y_end {
                 let start = row * stride + x;
                 pixels[start..start + w].fill(color);
             }

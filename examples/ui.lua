@@ -109,7 +109,7 @@ style = {
       margin = 0, -- default unit for all dimensions: pixels
       pad = 0,
       border = {
-         width = 5,
+         width = 0,
          color = colors.white,
       },
    },
@@ -143,6 +143,27 @@ menus = {
       "More Text", -- static/dynamic text (also widgets and progress bars etc.) is always vertically centered (horizontally left aligned) in its cell
       -- if there's too many items that fit on the screen it just looks ugly
       -- (we do not provide any clipping or scrolling features)
+   },
+
+   -- combining fixed and weighted layouts
+   FixedWeighted = {"col",
+      {"Little", size = 50}, -- size means height pixels (for rows it would mean width)
+      {"Big"}, -- implied weight = 1
+      {"Bigger", weight = 2}, -- regular weighted size
+   },
+
+   -- test of focusable widgets
+   Focusable = {"col",
+      {"This one yes", focusable = true},
+      {"This one no", focusable = false},
+      {"Also no"},
+   },
+
+   -- combining fixed width and weighted layouts
+   FixedWeighted = {"col",
+      {"Little", size = 50}, -- for rows, size means height pixels (for cols it would mean width)
+      {"Big"}, -- implied weight = 1
+      {"Bigger", weight = 2}, -- regular weighted size
    },
 
    -- dynamic labels: value is a string supplied via update() changes (prev: Complex, next: Grid)

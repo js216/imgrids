@@ -253,23 +253,40 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
         local ix = x + pl;  local iy = y + pt
         local iw = w - pl - pr;  local ih = h - pt - pb
 
-        -- Divide space by weight
+        -- Divide space: fixed-size children first, then weighted share the rest.
+        -- For "col" containers, child.size means height in pixels.
+        -- For "row" containers, child.size means width in pixels.
+        local total_sz = (dir == "col") and ih or iw
+        local total_fixed = 0
         local total_weight = 0
+        local n_weighted = 0
         for _, ch in ipairs(children) do
-            total_weight = total_weight + (type(ch) == "table" and ch.weight or 1)
+            if type(ch) == "table" and ch.size then
+                total_fixed = total_fixed + ch.size
+            else
+                total_weight = total_weight + (type(ch) == "table" and ch.weight or 1)
+                n_weighted = n_weighted + 1
+            end
         end
         if total_weight == 0 then total_weight = 1 end
+        local weighted_space = math.max(0, total_sz - total_fixed)
 
         local pos  = (dir == "col") and iy or ix
-        local total_sz = (dir == "col") and ih or iw
-        local used = 0
-        for i, ch in ipairs(children) do
-            local weight = type(ch) == "table" and ch.weight or 1
+        local used_weighted = 0
+        local weighted_seen = 0
+        for _, ch in ipairs(children) do
             local sz
-            if i == #children then
-                sz = total_sz - used   -- remainder to last child avoids rounding gaps
+            if type(ch) == "table" and ch.size then
+                sz = ch.size
             else
-                sz = math.floor(total_sz * weight / total_weight)
+                weighted_seen = weighted_seen + 1
+                local weight = type(ch) == "table" and ch.weight or 1
+                if weighted_seen == n_weighted then
+                    sz = weighted_space - used_weighted
+                else
+                    sz = math.floor(weighted_space * weight / total_weight)
+                    used_weighted = used_weighted + sz
+                end
             end
             if dir == "col" then
                 layout_node(ch, ix, pos, iw, sz, s, ops)
@@ -277,7 +294,6 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
                 layout_node(ch, pos, iy, sz, ih, s, ops)
             end
             pos = pos + sz
-            used = used + sz
         end
 
         -- Border around container
@@ -314,6 +330,14 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
             end
         end
 
+        -- Focusable flag: explicit override, or default to having a press handler
+        local is_focusable
+        if type(node) == "table" and node.focusable ~= nil then
+            is_focusable = node.focusable
+        else
+            is_focusable = (press ~= nil)
+        end
+
         local atlas   = get_atlas(s.font, s.fg, s.bg)
         local ch_px   = cell_height_est(s.font)
         local cw_px   = char_width_est(s.font)
@@ -326,6 +350,26 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
         local text_y  = (y + by) + math.floor(((h - bh) - ch_px) / 2)
         local pad_chars = math.max(0, math.floor((w - bw) / cw_px))
 
+        -- Compute focused style data for focusable cells
+        local foc = nil
+        if is_focusable then
+            local fs = merge_style(s, focused_ovr)
+            local fch_px = cell_height_est(fs.font)
+            local fcw_px = char_width_est(fs.font)
+            local fbx = border_inset(fs, "left")
+            local fby = border_inset(fs, "top")
+            local fbw = fbx + border_inset(fs, "right")
+            local fbh = fby + border_inset(fs, "bottom")
+            foc = {
+                atlas     = get_atlas(fs.font, fs.fg, fs.bg),
+                text_x    = x + fbx,
+                text_y    = (y + fby) + math.floor(((h - fbh) - fch_px) / 2),
+                pad_chars = math.max(0, math.floor((w - fbw) / fcw_px)),
+                border    = { width = fs.border.width, color = fs.border.color, side = fs.border.side },
+                bg        = fs.bg,
+            }
+        end
+
         if lbl then
             if render == "progress bar" then
                 ops[#ops + 1] = {
@@ -337,25 +381,31 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
                 }
             else
                 ops[#ops + 1] = {
-                    kind      = "dynamic",
+                    kind          = "dynamic",
                     x=x, y=y, w=w, h=h,
-                    text_x    = text_x,
-                    text_y    = text_y,
-                    lbl       = lbl,
-                    atlas     = atlas,
-                    pad_chars = pad_chars,
-                    press     = press,
+                    text_x        = text_x,
+                    text_y        = text_y,
+                    lbl           = lbl,
+                    atlas         = atlas,
+                    pad_chars     = pad_chars,
+                    press         = press,
+                    is_focusable  = is_focusable,
+                    foc           = foc,
+                    normal_border = { width=s.border.width, color=s.border.color, side=s.border.side },
                 }
             end
         elseif text then
             ops[#ops + 1] = {
-                kind   = "static",
+                kind          = "static",
                 x=x, y=y, w=w, h=h,
-                text_x = text_x,
-                text_y = text_y,
-                text   = text,
-                atlas  = atlas,
-                press  = press,
+                text_x        = text_x,
+                text_y        = text_y,
+                text          = text,
+                atlas         = atlas,
+                press         = press,
+                is_focusable  = is_focusable,
+                foc           = foc,
+                normal_border = { width=s.border.width, color=s.border.color, side=s.border.side },
             }
         end
 
@@ -437,9 +487,14 @@ local function sha256_file(path)
     return line and line:match("^(%x+)") or "unavailable"
 end
 local function sha256_str(s)
-    local f = io.popen("printf '%s' " .. string.format("%q", s) .. " | sha256sum 2>/dev/null || printf '%s' " .. string.format("%q", s) .. " | shasum -a 256")
-    if not f then return "unavailable" end
+    local tmp = os.tmpname()
+    local tf = io.open(tmp, "w")
+    if not tf then return "unavailable" end
+    tf:write(s); tf:close()
+    local f = io.popen("sha256sum " .. tmp .. " 2>/dev/null || shasum -a 256 " .. tmp)
+    if not f then os.remove(tmp); return "unavailable" end
     local line = f:read("*l"); f:close()
+    os.remove(tmp)
     return line and line:match("^(%x+)") or "unavailable"
 end
 local transpiler_hash = sha256_file("scripts/layout.lua")
@@ -506,8 +561,9 @@ end
 e("}")
 e("")
 
--- CURRENT_MENU static
+-- CURRENT_MENU and FOCUSED statics
 e("static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);")
+e("static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);")
 e("")
 
 -- Collect callbacks: map fn_name -> max_nargs
@@ -573,6 +629,7 @@ e("    let mut current = CURRENT_MENU.lock().unwrap();")
 e("    if *current != Some(menu) {")
 e("        *current = Some(menu);")
 e("        drop(current);")
+e("        *FOCUSED.lock().unwrap() = None;")
 e("        match menu {")
 for _, name in ipairs(menu_names) do
     e("            Menu::%s => draw_%s(backend),", name, name:lower())
@@ -602,6 +659,8 @@ for _, name in ipairs(menu_names) do
         screen.width, screen.height, rgb_lit(default_style.bg))
     for _, op in ipairs(menu_ops[name]) do
         if op.kind == "static" then
+            e("    backend.fill_rect(%d, %d, %d, %d, %s);",
+                op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
             e("    %s().draw(backend, %d, %d, %q);",
                 op.atlas.fn_name, op.text_x, op.text_y, op.text)
         elseif op.kind == "dynamic" or op.kind == "progress" then
@@ -627,6 +686,64 @@ for _, name in ipairs(menu_names) do
     e("")
 end
 
+-- Helper: collect focusable (static/dynamic, is_focusable=true) ops in order
+local function get_focusable_ops(ops)
+    local fops = {}
+    for _, op in ipairs(ops) do
+        if (op.kind == "static" or op.kind == "dynamic") and op.is_focusable then
+            fops[#fops + 1] = op
+        end
+    end
+    return fops
+end
+
+-- Helper: emit border drawing lines (fill_rect or draw_border)
+local function emit_border(indent, op_x, op_y, op_w, op_h, b)
+    if b.width == 0 then return end
+    local i = indent
+    if b.side then
+        local x2, y2, w2, h2, t, c = op_x, op_y, op_w, op_h, b.width, rgb_lit(b.color)
+        if     b.side == "top"    then e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2,       y2,       w2, t, c)
+        elseif b.side == "bottom" then e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2,       y2+h2-t,  w2, t, c)
+        elseif b.side == "left"   then e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2,       y2,       t,  h2, c)
+        elseif b.side == "right"  then e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2+w2-t,  y2,       t,  h2, c)
+        end
+    else
+        e("%sbackend.draw_border(%d, %d, %d, %d, %d, %s);",
+            i, op_x, op_y, op_w, op_h, b.width, rgb_lit(b.color))
+    end
+end
+
+-- draw_focus_<menu>() per-menu focus redraw functions
+for _, name in ipairs(menu_names) do
+    local fops = get_focusable_ops(menu_ops[name])
+    if #fops > 0 then
+        e("fn draw_focus_%s(backend: &mut dyn Backend, focused: Option<usize>) {", name:lower())
+        for fi, op in ipairs(fops) do
+            local idx = fi - 1
+            e("    if focused == Some(%d) {", idx)
+            e("        backend.fill_rect(%d, %d, %d, %d, %s);",
+                op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
+            if op.kind == "static" then
+                e("        %s().draw(backend, %d, %d, %q);",
+                    op.foc.atlas.fn_name, op.foc.text_x, op.foc.text_y, op.text)
+            end
+            emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
+            e("    } else {")
+            e("        backend.fill_rect(%d, %d, %d, %d, %s);",
+                op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
+            if op.kind == "static" then
+                e("        %s().draw(backend, %d, %d, %q);",
+                    op.atlas.fn_name, op.text_x, op.text_y, op.text)
+            end
+            emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
+            e("    }")
+        end
+        e("}")
+        e("")
+    end
+end
+
 -- update_events_<menu><C: Callbacks>() per-menu functions
 for _, name in ipairs(menu_names) do
     local ops = menu_ops[name]
@@ -634,32 +751,61 @@ for _, name in ipairs(menu_names) do
     for _, op in ipairs(ops) do
         if op.press then press_ops[#press_ops + 1] = op end
     end
+    local fops = get_focusable_ops(ops)
+    local has_press = #press_ops > 0
+    local has_focus = #fops > 0
 
-    local ev_param = #press_ops > 0 and "events"  or "_events"
-    local st_param = #press_ops > 0 and "state"   or "_state"
+    local ev_param = (has_press or has_focus) and "events"  or "_events"
+    local st_param = has_press               and "state"   or "_state"
     e("fn update_events_%s<C: Callbacks>(%s: &[InputEvent], %s: &mut C) {",
         name:lower(), ev_param, st_param)
 
-    if #press_ops > 0 then
+    if has_press or has_focus then
         e("    for ev in events {")
         e("        if let InputEvent::Press { x, y } = ev {")
-        for _, op in ipairs(press_ops) do
-            local fn_name = op.press[1]
-            local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
-            local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
-            e("            if %s*x < %d && %s*y < %d {",
-                x_lo, op.x + op.w, y_lo, op.y + op.h)
-            if callbacks[fn_name] > 0 then
-                local args = {}
-                for i = 2, #op.press do
-                    args[#args + 1] = ("%q"):format(op.press[i])
-                end
-                e("                state.%s(&[%s]);", fn_name, table.concat(args, ", "))
+
+        if has_focus then
+            if #fops == 1 then
+                local op = fops[1]
+                local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
+                local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
+                e("            *FOCUSED.lock().unwrap() = if %s*x < %d && %s*y < %d { Some(0) } else { None };",
+                    x_lo, op.x + op.w, y_lo, op.y + op.h)
             else
-                e("                state.%s();", fn_name)
+                e("            let new_focus =")
+                for fi, op in ipairs(fops) do
+                    local idx = fi - 1
+                    local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
+                    local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
+                    local prefix = fi == 1 and "                if " or "                else if "
+                    e("%s%s*x < %d && %s*y < %d { Some(%d) }",
+                        prefix, x_lo, op.x + op.w, y_lo, op.y + op.h, idx)
+                end
+                e("                else { None };")
+                e("            *FOCUSED.lock().unwrap() = new_focus;")
             end
-            e("            }")
         end
+
+        if has_press then
+            for _, op in ipairs(press_ops) do
+                local fn_name = op.press[1]
+                local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
+                local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
+                e("            if %s*x < %d && %s*y < %d {",
+                    x_lo, op.x + op.w, y_lo, op.y + op.h)
+                if callbacks[fn_name] > 0 then
+                    local args = {}
+                    for i = 2, #op.press do
+                        args[#args + 1] = ("%q"):format(op.press[i])
+                    end
+                    e("                state.%s(&[%s]);", fn_name, table.concat(args, ", "))
+                else
+                    e("                state.%s();", fn_name)
+                end
+                e("            }")
+            end
+        end
+
         e("        }")
         e("    }")
     end
@@ -677,8 +823,9 @@ for _, name in ipairs(menu_names) do
         if op.kind == "dynamic" then dyn_ops[#dyn_ops + 1] = op end
         if op.kind == "progress" then prog_ops[#prog_ops + 1] = op end
     end
+    local fops = get_focusable_ops(ops)
 
-    local be_param  = (#dyn_ops + #prog_ops) > 0 and "backend" or "_backend"
+    local be_param  = (#dyn_ops + #prog_ops + #fops) > 0 and "backend" or "_backend"
     local chg_param = (#dyn_ops + #prog_ops) > 0 and "changes" or "_changes"
     e("fn update_changes_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {",
         name:lower(), be_param, chg_param)
@@ -726,6 +873,10 @@ for _, name in ipairs(menu_names) do
             e("        }")
         end
         e("    }")
+    end
+
+    if #fops > 0 then
+        e("    draw_focus_%s(backend, *FOCUSED.lock().unwrap());", name:lower())
     end
 
     e("}")

@@ -21,6 +21,7 @@ fn main() {
         font.blit(fb, stride, 100, 100, "Hello,");
         ttf.blit(fb, stride, 100, 132, "world!");
     });
+    backend.flush();
 
     loop {
         for ev in backend.poll_events().iter().copied() {
@@ -34,6 +35,7 @@ fn main() {
 
         if (x0 != 0) && (y0 != 0) {
             backend.fill_rect(x0, y0, 10, 10, rgb!(BLUE));
+            backend.flush();
         }
 
         imgrids::sleep(33);
