@@ -97,14 +97,16 @@ impl Backend for Sdl2Backend {
         self.dirty = false;
         let pixels = &self.pixels;
         let width = self.width;
+        let height = self.height;
         self.texture
             .with_lock(None, |buffer: &mut [u8], stride: usize| {
                 let row_bytes = width * 2;
+                let src_bytes = width * height * 2;
                 let src = unsafe {
-                    std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 2)
+                    std::slice::from_raw_parts(pixels.as_ptr() as *const u8, src_bytes)
                 };
                 if stride == row_bytes {
-                    buffer.copy_from_slice(src);
+                    buffer[..src_bytes].copy_from_slice(src);
                 } else {
                     for row in 0..buffer.len() / stride {
                         buffer[row * stride..row * stride + row_bytes]

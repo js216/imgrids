@@ -65,7 +65,7 @@ impl Backend for WebBackend {
         unsafe {
             imgrids_blit(
                 self.pixels.as_ptr() as *const u8,
-                self.pixels.len() * std::mem::size_of::<Pixel>(),
+                self.width * self.height * std::mem::size_of::<Pixel>(),
                 self.width as u32,
                 self.height as u32,
             );

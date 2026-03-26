@@ -410,6 +410,16 @@ local function layout_node(node, x, y, w, h, ops)
 			end
 		end
 
+		-- Text alignment: "left" (default), "center", "right"
+		local align = "left"
+		if type(node) == "table" and node.align then
+			align = node.align
+			if align ~= "left" and align ~= "center" and align ~= "right" then
+				warn("unknown align=%q, using 'left'", align)
+				align = "left"
+			end
+		end
+
 		-- Focusable flag: explicit override, or default to having a press handler
 		local is_focusable
 		if type(node) == "table" and node.focusable ~= nil then
@@ -427,7 +437,8 @@ local function layout_node(node, x, y, w, h, ops)
 		local bw = bx + border_inset(s, "right") + eff_pad(s, "right")
 		local bh = by + border_inset(s, "bottom") + eff_pad(s, "bottom")
 		local text_x = x + bx
-		local pad_chars = math.max(0, math.floor((w - bw) / cw_px))
+		local inner_w = math.max(0, w - bw)
+		local pad_chars = math.max(0, math.floor(inner_w / cw_px))
 		-- Split text on \n; center the whole block vertically
 		local line_gap = 2
 		local lines = {}
@@ -440,6 +451,19 @@ local function layout_node(node, x, y, w, h, ops)
 		local block_h = n_lines * ch_px + (n_lines - 1) * line_gap
 		local text_y = (y + by) + math.floor(((h - bh) - block_h) / 2)
 		local line_step = ch_px + line_gap
+		-- Per-line x positions for static text alignment
+		local line_xs = {}
+		for i, line in ipairs(lines) do
+			if align == "center" then
+				local tw = #line * cw_px
+				line_xs[i] = text_x + math.floor((inner_w - tw) / 2)
+			elseif align == "right" then
+				local tw = #line * cw_px
+				line_xs[i] = text_x + (inner_w - tw)
+			else
+				line_xs[i] = text_x
+			end
+		end
 
 		-- Compute focused style data for focusable cells
 		local foc = nil
@@ -453,12 +477,27 @@ local function layout_node(node, x, y, w, h, ops)
 			local fbh = fby + border_inset(fs, "bottom") + eff_pad(fs, "bottom")
 			local fn_lines = math.max(1, #lines)
 			local fblock_h = fn_lines * fch_px + (fn_lines - 1) * line_gap
+			local f_text_x = x + fbx
+			local f_inner_w = math.max(0, w - fbw)
+			local f_line_xs = {}
+			for i, line in ipairs(lines) do
+				if align == "center" then
+					local tw = #line * fcw_px
+					f_line_xs[i] = f_text_x + math.floor((f_inner_w - tw) / 2)
+				elseif align == "right" then
+					local tw = #line * fcw_px
+					f_line_xs[i] = f_text_x + (f_inner_w - tw)
+				else
+					f_line_xs[i] = f_text_x
+				end
+			end
 			foc = {
 				atlas = get_atlas(fs.font, fs.fg, fs.bg),
-				text_x = x + fbx,
+				text_x = f_text_x,
+				line_xs = f_line_xs,
 				text_y = (y + fby) + math.floor(((h - fbh) - fblock_h) / 2),
 				line_step = fch_px + line_gap,
-				pad_chars = math.max(0, math.floor((w - fbw) / fcw_px)),
+				pad_chars = math.max(0, math.floor(f_inner_w / fcw_px)),
 				border = { width = fs.border.width, color = fs.border.color, side = fs.border.side },
 				bg = fs.bg,
 			}
@@ -509,6 +548,8 @@ local function layout_node(node, x, y, w, h, ops)
 					lbl = lbl,
 					atlas = atlas,
 					pad_chars = pad_chars,
+					align = align,
+					inner_w = inner_w,
 					press = press,
 					is_focusable = is_focusable,
 					foc = foc,
@@ -524,6 +565,7 @@ local function layout_node(node, x, y, w, h, ops)
 				h = h,
 				text_x = text_x,
 				text_y = text_y,
+				line_xs = line_xs,
 				lines = lines,
 				line_step = line_step,
 				atlas = atlas,
@@ -566,13 +608,13 @@ for _, name in ipairs(menu_names) do
 	local mx = 0
 	local my = 0
 
-	if m.size then
-		mw = m.size[1]
-		mh = m.size[2]
-		if m.align then
-			local ax = m.align[1]
-			local ay = m.align[2]
-			local anchor = m.anchor or "center"
+	if m.menu_size then
+		mw = m.menu_size[1]
+		mh = m.menu_size[2]
+		if m.menu_align then
+			local ax = m.menu_align[1]
+			local ay = m.menu_align[2]
+			local anchor = m.menu_anchor or "center"
 			if anchor == "center" then
 				mx = math.floor(ax - mw / 2)
 				my = math.floor(ay - mh / 2)
@@ -837,7 +879,7 @@ for _, name in ipairs(menu_names) do
 		if op.kind == "static" then
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			for i, line in ipairs(op.lines) do
-				e("    %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, op.text_x, op.text_y + (i - 1) * op.line_step, line)
+				e("    %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, op.line_xs[i], op.text_y + (i - 1) * op.line_step, line)
 			end
 		elseif op.kind == "dynamic" or op.kind == "progress" then
 			local bg = op.atlas and op.atlas.bg or op.bg
@@ -882,6 +924,26 @@ local function get_focusable_ops(ops)
 	return fops
 end
 
+-- Helper: emit blit code for a single dynamic label (inside render closure)
+local function emit_dyn_blit(op, indent)
+	if op.align == "left" then
+		e("%s%s().blit(fb, stride, %d, %d,", indent, op.atlas.fn_name, op.text_x, op.text_y)
+		e('%s    &format!("{:<%d}", val));', indent, op.pad_chars)
+	else
+		e("%slet a = %s();", indent, op.atlas.fn_name)
+		-- Clear old text with spaces
+		e('%sa.blit(fb, stride, %d, %d, &format!("{:<%d}", ""));', indent, op.text_x, op.text_y, op.pad_chars)
+		e("%slet tw = a.text_width(val);", indent)
+		if op.align == "center" then
+			e("%sa.blit(fb, stride, %d + (%d_usize.saturating_sub(tw)) / 2, %d, val);",
+				indent, op.text_x, op.inner_w, op.text_y)
+		else -- right
+			e("%sa.blit(fb, stride, %d + %d_usize.saturating_sub(tw), %d, val);",
+				indent, op.text_x, op.inner_w, op.text_y)
+		end
+	end
+end
+
 -- Helper: emit border drawing lines (fill_rect or draw_border)
 local function emit_border(indent, op_x, op_y, op_w, op_h, b)
 	if b.width == 0 then
@@ -915,13 +977,10 @@ for _, name in ipairs(menu_names) do
 			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
-					e(
-						"        %s().draw(backend, %d, %d, %q);",
-						op.foc.atlas.fn_name,
-						op.foc.text_x,
-						op.foc.text_y + (i - 1) * op.foc.line_step,
-						line
-					)
+					local fx = op.foc.line_xs[i] or op.foc.text_x
+					e("        %s().draw(backend, %d, %d, %q);",
+						op.foc.atlas.fn_name, fx,
+						op.foc.text_y + (i - 1) * op.foc.line_step, line)
 				end
 			end
 			emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
@@ -929,7 +988,8 @@ for _, name in ipairs(menu_names) do
 			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
-					e("        %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, op.text_x, op.text_y + (i - 1) * op.line_step, line)
+					local lx = op.line_xs[i] or op.text_x
+					e("        %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, lx, op.text_y + (i - 1) * op.line_step, line)
 				end
 			end
 			emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
@@ -1045,17 +1105,17 @@ for _, name in ipairs(menu_names) do
 		if #dyn_ops == 1 then
 			local op = dyn_ops[1]
 			e("                if name == %q {", op.lbl)
-			e("                    %s().blit(fb, stride, %d, %d,", op.atlas.fn_name, op.text_x, op.text_y)
-			e('                        &format!("{:<%d}", val));', op.pad_chars)
+			emit_dyn_blit(op, "                    ")
 			e("                }")
 		else
 			e("                match name {")
 			for _, op in ipairs(dyn_ops) do
-				e("                    %q => %s().blit(fb, stride, %d, %d,", op.lbl, op.atlas.fn_name, op.text_x, op.text_y)
-				e('                        &format!("{:<%d}", val)),', op.pad_chars)
+				e("                    %q => {", op.lbl)
+				emit_dyn_blit(op, "                        ")
+				e("                    }")
 			end
 			e("                    _ => {}")
-				e("                }")
+			e("                }")
 		end
 		e("            }")
 		e("        });")
