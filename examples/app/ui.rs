@@ -2,7 +2,7 @@
 // Re-run the transpiler to update:
 //   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
 // transpiler: 0825862e7932b4fac515ae3470f4a500887e351921b65b1544e33ff74282b3f2
-// input:      0ae08df6aa4ede3bc3117f6ee7749484364ea3247943906edc2ba4dc0dac8f6e
+// input:      43801f50aca8064961aeec46d473ac7fe0ff810d24e88e3e2fe2bbe861ceaa9c
 
 use imgrids::{rgb, Backend, InputEvent, Renderer};
 use imgrids::ttf::TtfAtlas;
@@ -43,6 +43,7 @@ fn atlas_5() -> &'static TtfAtlas {
 pub enum Menu {
     Borders,
     Clickable,
+    Cols,
     Complex,
     Dynamic,
     Fixed,
@@ -72,6 +73,7 @@ pub fn to_menu(name: &str) -> Option<Menu> {
     match name {
         "Borders" => Some(Menu::Borders),
         "Clickable" => Some(Menu::Clickable),
+        "Cols" => Some(Menu::Cols),
         "Complex" => Some(Menu::Complex),
         "Dynamic" => Some(Menu::Dynamic),
         "Fixed" => Some(Menu::Fixed),
@@ -96,6 +98,7 @@ pub fn update_events<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     match *CURRENT_MENU.lock().unwrap() {
         Some(Menu::Borders) => update_events_borders(events, state),
         Some(Menu::Clickable) => update_events_clickable(events, state),
+        Some(Menu::Cols) => update_events_cols(events, state),
         Some(Menu::Complex) => update_events_complex(events, state),
         Some(Menu::Dynamic) => update_events_dynamic(events, state),
         Some(Menu::Fixed) => update_events_fixed(events, state),
@@ -122,6 +125,7 @@ pub fn update_menu(backend: &mut dyn Backend, menu: Menu) {
         match menu {
             Menu::Borders => draw_borders(backend),
             Menu::Clickable => draw_clickable(backend),
+            Menu::Cols => draw_cols(backend),
             Menu::Complex => draw_complex(backend),
             Menu::Dynamic => draw_dynamic(backend),
             Menu::Fixed => draw_fixed(backend),
@@ -144,6 +148,7 @@ pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
     match *CURRENT_MENU.lock().unwrap() {
         Some(Menu::Borders) => update_changes_borders(backend, changes),
         Some(Menu::Clickable) => update_changes_clickable(backend, changes),
+        Some(Menu::Cols) => update_changes_cols(backend, changes),
         Some(Menu::Complex) => update_changes_complex(backend, changes),
         Some(Menu::Dynamic) => update_changes_dynamic(backend, changes),
         Some(Menu::Fixed) => update_changes_fixed(backend, changes),
@@ -198,6 +203,34 @@ fn draw_clickable(backend: &mut dyn Backend) {
     atlas_1().draw(backend, 0, 306, "fn action() — one arg");
     backend.fill_rect(0, 375, 800, 105, rgb!(0, 0, 0));
     atlas_1().draw(backend, 0, 411, "fn action() — two args");
+}
+
+fn draw_cols(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 60, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 14, "Prev");
+    backend.fill_rect(400, 0, 400, 60, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 14, "Next");
+    backend.fill_rect(0, 60, 800, 210, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 149, "col inside a row: each column stacks its own children.");
+    backend.fill_rect(0, 270, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 289, "Col A top");
+    backend.fill_rect(0, 340, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 359, "Col A mid");
+    backend.fill_rect(0, 410, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 429, "Col A bot");
+    backend.fill_rect(266, 270, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 289, "Col B top");
+    backend.fill_rect(266, 340, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 359, "Col B mid");
+    backend.fill_rect(266, 410, 266, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 429, "Col B bot");
+    backend.fill_rect(532, 270, 268, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 289, "Col C top");
+    backend.fill_rect(532, 340, 268, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 359, "Col C mid");
+    backend.fill_rect(532, 410, 268, 70, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 429, "Col C bot");
 }
 
 fn draw_complex(backend: &mut dyn Backend) {
@@ -469,6 +502,25 @@ fn draw_focus_clickable(backend: &mut dyn Backend, focused: Option<usize>) {
     } else {
         backend.fill_rect(0, 375, 800, 105, rgb!(0, 0, 0));
         atlas_1().draw(backend, 0, 411, "fn action() — two args");
+    }
+}
+
+fn draw_focus_cols(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 60, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 14, "Prev");
+        backend.draw_border(0, 0, 400, 60, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 60, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 14, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 60, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 14, "Next");
+        backend.draw_border(400, 0, 400, 60, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 60, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 14, "Next");
     }
 }
 
@@ -775,6 +827,24 @@ fn update_events_clickable<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     }
 }
 
+fn update_events_cols<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+    for ev in events {
+        if let InputEvent::Press { x, y } = ev {
+            let new_focus =
+                if *x < 400 && *y < 60 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 60 { Some(1) }
+                else { None };
+            *FOCUSED.lock().unwrap() = new_focus;
+            if *x < 400 && *y < 60 {
+                state.nav(&["Rows"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 60 {
+                state.nav(&["Weighted"]);
+            }
+        }
+    }
+}
+
 fn update_events_complex<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
@@ -950,7 +1020,7 @@ fn update_events_rows<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 state.nav(&["Hello"]);
             }
             if *x >= 400 && *x < 800 && *y < 60 {
-                state.nav(&["Weighted"]);
+                state.nav(&["Cols"]);
             }
         }
     }
@@ -1001,7 +1071,7 @@ fn update_events_weighted<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
             if *x < 400 && *y < 60 {
-                state.nav(&["Rows"]);
+                state.nav(&["Cols"]);
             }
             if *x >= 400 && *x < 800 && *y < 60 {
                 state.nav(&["Fixed"]);
@@ -1016,6 +1086,10 @@ fn update_changes_borders(backend: &mut dyn Backend, _changes: &[(&str, &str)]) 
 
 fn update_changes_clickable(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
     draw_focus_clickable(backend, *FOCUSED.lock().unwrap());
+}
+
+fn update_changes_cols(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_cols(backend, *FOCUSED.lock().unwrap());
 }
 
 fn update_changes_complex(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
