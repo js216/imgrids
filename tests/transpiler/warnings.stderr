@@ -1,3 +1,4 @@
+WARNING: text bottom 483 exceeds screen height 480: "Bottom" in Overflow
 WARNING: unknown anchor 'bad_anchor', using center
 WARNING: old press syntax press="click", use press={"click"}
 WARNING: border has side='top' but width=0 (no pixels drawn)

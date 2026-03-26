@@ -20,4 +20,10 @@ menus = {
         {"BadFont", font = fonts.bad},      -- (1) unknown raster font used
         {"Big margin", margin = 500},       -- (5) margin exceeds available size
     },
+    -- (6) text exceeds screen bounds: tall fixed child leaves only 10px
+    -- for the last child, but the 16px font can't fit, overflows screen
+    Overflow = { "col",
+        {"Top",    size = 470},
+        {"Bottom"},                            -- 10px tall, 16px font overflows
+    },
 }

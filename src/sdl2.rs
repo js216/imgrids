@@ -44,7 +44,9 @@ impl Sdl2Backend {
             event_pump,
             width: width as usize,
             height: height as usize,
-            pixels: vec![0; (width * height) as usize],
+            // Over-allocate by 64 rows so glyph blits near the bottom edge
+            // can never index out of bounds.  Extra pixels are never uploaded.
+            pixels: vec![0; (width * (height + 64)) as usize],
             dirty: false,
             _creator: creator,
             events: Vec::new(),

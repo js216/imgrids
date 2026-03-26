@@ -278,12 +278,17 @@ local function get_press(node)
 	return p
 end
 
+local current_menu_name  -- set before each layout_node call
 local function layout_node(node, x, y, w, h, ops)
 	-- Style never propagates from parent to child; each node starts from default_style.
 	local s = merge_style(default_style, node)
 
-	-- Apply margin
+	-- Apply margin (containers only use margin when explicitly set on node)
 	local mx = s.margin
+	if is_container(node) then
+		local src = type(node) == "table" and (node.style or node) or nil
+		if not (src and src.margin) then mx = 0 end
+	end
 	x = x + mx
 	y = y + mx
 	w = w - 2 * mx
@@ -303,17 +308,23 @@ local function layout_node(node, x, y, w, h, ops)
 			children[#children + 1] = node[i]
 		end
 
-		-- Containers only create a border inset and draw a border when border= is
-		-- explicitly set on THIS node; inherited border only applies to leaves.
+		-- Containers only use border/padding/margin from default_style when
+		-- explicitly set on THIS node; defaults only apply to leaves.
 		local has_border = type(node) == "table" and node.border ~= nil
 		local cbs = has_border and s
 			or { border = { width = 0, color = s.border.color, side = s.border.side } }
 
-		-- Container padding + border inset (border eats into child layout space)
-		local pl = eff_pad(s, "left") + border_inset(cbs, "left")
-		local pt = eff_pad(s, "top") + border_inset(cbs, "top")
-		local pr = eff_pad(s, "right") + border_inset(cbs, "right")
-		local pb = eff_pad(s, "bottom") + border_inset(cbs, "bottom")
+		-- Container padding: only when explicitly set on node (not from default_style)
+		local src = type(node) == "table" and (node.style or node) or nil
+		local has_pad = src and (src.pad or src.pad_left or src.pad_top or src.pad_right or src.pad_bottom)
+		local function cpad(side)
+			if not has_pad then return 0 end
+			return eff_pad(s, side)
+		end
+		local pl = cpad("left") + border_inset(cbs, "left")
+		local pt = cpad("top") + border_inset(cbs, "top")
+		local pr = cpad("right") + border_inset(cbs, "right")
+		local pb = cpad("bottom") + border_inset(cbs, "bottom")
 		local ix = x + pl
 		local iy = y + pt
 		local iw = w - pl - pr
@@ -453,6 +464,21 @@ local function layout_node(node, x, y, w, h, ops)
 			}
 		end
 
+		-- Bounds checks: warn if text would exceed screen (skip zero-size cells)
+		if w > 0 and h > 0 then
+			local label = (text or lbl or ""):gsub("\n", "\\n")
+			local text_bottom = text_y + block_h
+			local text_right = text_x + pad_chars * cw_px
+			if text_bottom > screen.height then
+				warn("text bottom %d exceeds screen height %d: %q in %s",
+					text_bottom, screen.height, label, current_menu_name or "?")
+			end
+			if text_right > screen.width then
+				warn("text right %d exceeds screen width %d: %q in %s",
+					text_right, screen.width, label, current_menu_name or "?")
+			end
+		end
+
 		if lbl then
 			if render == "progress bar" then
 				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
@@ -565,6 +591,7 @@ for _, name in ipairs(menu_names) do
 	end
 
 	local ops = {}
+	current_menu_name = name
 	layout_node(m, mx, my, mw, mh, ops)
 	menu_ops[name] = ops
 end

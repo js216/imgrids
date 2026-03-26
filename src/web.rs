@@ -103,7 +103,9 @@ impl Backend for WebBackend {
 pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
     unsafe { imgrids_setup_input() };
     Box::new(WebBackend {
-        pixels: vec![0; w * h],
+        // Over-allocate by 64 rows so glyph blits near the bottom edge
+        // can never index out of bounds.  Extra pixels are never uploaded.
+        pixels: vec![0; w * (h + 64)],
         width: w,
         height: h,
         dirty: false,
