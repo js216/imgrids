@@ -18,5 +18,6 @@ menus = {
         {"Click",  press = "click"},        -- (3) old press syntax
         {"row", "Label", border = {side = "top"}},  -- (4) zero-width border
         {"BadFont", font = fonts.bad},      -- (1) unknown raster font used
+        {"Big margin", margin = 500},       -- (5) margin exceeds available size
     },
 }

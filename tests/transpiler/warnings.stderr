@@ -4,4 +4,5 @@ WARNING: border has side='top' but width=0 (no pixels drawn)
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32
+WARNING: margin=500 exceeds available size, cell clipped to zero
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32
