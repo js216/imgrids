@@ -2,7 +2,7 @@
 // Re-run the transpiler to update:
 //   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
 // transpiler: 0825862e7932b4fac515ae3470f4a500887e351921b65b1544e33ff74282b3f2
-// input:      018cbcde9b087c80e809c501593c10d1c155300536509907b17a28cc71319f57
+// input:      ea3b9e0e4952d386fa2e02a13bd020ec0072cd98e9612bf3e8260ed29f1d17b8
 
 use imgrids::{rgb, Backend, InputEvent, Renderer};
 use imgrids::ttf::TtfAtlas;
@@ -17,14 +17,26 @@ fn atlas_1() -> &'static TtfAtlas {
 
 static ATLAS_2: OnceLock<TtfAtlas> = OnceLock::new();
 fn atlas_2() -> &'static TtfAtlas {
-    ATLAS_2.get_or_init(|| TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(0, 255, 0))
+    ATLAS_2.get_or_init(|| TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(0, 0, 255))
         .expect("fonts/RobotoMono-Regular.ttf"))
 }
 
 static ATLAS_3: OnceLock<TtfAtlas> = OnceLock::new();
 fn atlas_3() -> &'static TtfAtlas {
-    ATLAS_3.get_or_init(|| TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 24, rgb!(255, 255, 255), rgb!(0, 255, 0))
-        .expect("fonts/MyriadPro-Regular.ttf"))
+    ATLAS_3.get_or_init(|| TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(0, 255, 0))
+        .expect("fonts/RobotoMono-Regular.ttf"))
+}
+
+static ATLAS_4: OnceLock<TtfAtlas> = OnceLock::new();
+fn atlas_4() -> &'static TtfAtlas {
+    ATLAS_4.get_or_init(|| TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, rgb!(0, 0, 0), rgb!(0, 255, 0))
+        .expect("fonts/RobotoMono-Regular.ttf"))
+}
+
+static ATLAS_5: OnceLock<TtfAtlas> = OnceLock::new();
+fn atlas_5() -> &'static TtfAtlas {
+    ATLAS_5.get_or_init(|| TtfAtlas::new("fonts/RobotoMono-Regular.ttf", 32, rgb!(255, 255, 255), rgb!(255, 0, 0))
+        .expect("fonts/RobotoMono-Regular.ttf"))
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -32,18 +44,18 @@ pub enum Menu {
     Borders,
     Clickable,
     Complex,
-    DynStat,
-    FixedWeighted,
+    Dynamic,
+    Fixed,
     Focusable,
-    Grid,
+    Hello,
     Margin,
     Pad,
     Popup,
-    Simple,
+    Progress,
+    Rows,
     Styled,
     SubStyled,
-    Unequal,
-    Widget,
+    Weighted,
 }
 
 static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);
@@ -51,11 +63,8 @@ static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);
 
 pub trait Callbacks {
     fn quit(&mut self);
+    fn action(&mut self, args: &[&str]);
     fn click(&mut self);
-    fn fn3(&mut self);
-    fn fn_multi(&mut self, args: &[&str]);
-    fn function_cl(&mut self);
-    fn function_pr(&mut self, args: &[&str]);
     fn nav(&mut self, args: &[&str]);
 }
 
@@ -64,18 +73,18 @@ pub fn to_menu(name: &str) -> Option<Menu> {
         "Borders" => Some(Menu::Borders),
         "Clickable" => Some(Menu::Clickable),
         "Complex" => Some(Menu::Complex),
-        "DynStat" => Some(Menu::DynStat),
-        "FixedWeighted" => Some(Menu::FixedWeighted),
+        "Dynamic" => Some(Menu::Dynamic),
+        "Fixed" => Some(Menu::Fixed),
         "Focusable" => Some(Menu::Focusable),
-        "Grid" => Some(Menu::Grid),
+        "Hello" => Some(Menu::Hello),
         "Margin" => Some(Menu::Margin),
         "Pad" => Some(Menu::Pad),
         "Popup" => Some(Menu::Popup),
-        "Simple" => Some(Menu::Simple),
+        "Progress" => Some(Menu::Progress),
+        "Rows" => Some(Menu::Rows),
         "Styled" => Some(Menu::Styled),
         "SubStyled" => Some(Menu::SubStyled),
-        "Unequal" => Some(Menu::Unequal),
-        "Widget" => Some(Menu::Widget),
+        "Weighted" => Some(Menu::Weighted),
         _ => None,
     }
 }
@@ -88,18 +97,18 @@ pub fn update_events<C: Callbacks>(events: &[InputEvent], state: &mut C) {
         Some(Menu::Borders) => update_events_borders(events, state),
         Some(Menu::Clickable) => update_events_clickable(events, state),
         Some(Menu::Complex) => update_events_complex(events, state),
-        Some(Menu::DynStat) => update_events_dynstat(events, state),
-        Some(Menu::FixedWeighted) => update_events_fixedweighted(events, state),
+        Some(Menu::Dynamic) => update_events_dynamic(events, state),
+        Some(Menu::Fixed) => update_events_fixed(events, state),
         Some(Menu::Focusable) => update_events_focusable(events, state),
-        Some(Menu::Grid) => update_events_grid(events, state),
+        Some(Menu::Hello) => update_events_hello(events, state),
         Some(Menu::Margin) => update_events_margin(events, state),
         Some(Menu::Pad) => update_events_pad(events, state),
         Some(Menu::Popup) => update_events_popup(events, state),
-        Some(Menu::Simple) => update_events_simple(events, state),
+        Some(Menu::Progress) => update_events_progress(events, state),
+        Some(Menu::Rows) => update_events_rows(events, state),
         Some(Menu::Styled) => update_events_styled(events, state),
         Some(Menu::SubStyled) => update_events_substyled(events, state),
-        Some(Menu::Unequal) => update_events_unequal(events, state),
-        Some(Menu::Widget) => update_events_widget(events, state),
+        Some(Menu::Weighted) => update_events_weighted(events, state),
         None => {}
     }
 }
@@ -114,18 +123,18 @@ pub fn update_menu(backend: &mut dyn Backend, menu: Menu) {
             Menu::Borders => draw_borders(backend),
             Menu::Clickable => draw_clickable(backend),
             Menu::Complex => draw_complex(backend),
-            Menu::DynStat => draw_dynstat(backend),
-            Menu::FixedWeighted => draw_fixedweighted(backend),
+            Menu::Dynamic => draw_dynamic(backend),
+            Menu::Fixed => draw_fixed(backend),
             Menu::Focusable => draw_focusable(backend),
-            Menu::Grid => draw_grid(backend),
+            Menu::Hello => draw_hello(backend),
             Menu::Margin => draw_margin(backend),
             Menu::Pad => draw_pad(backend),
             Menu::Popup => draw_popup(backend),
-            Menu::Simple => draw_simple(backend),
+            Menu::Progress => draw_progress(backend),
+            Menu::Rows => draw_rows(backend),
             Menu::Styled => draw_styled(backend),
             Menu::SubStyled => draw_substyled(backend),
-            Menu::Unequal => draw_unequal(backend),
-            Menu::Widget => draw_widget(backend),
+            Menu::Weighted => draw_weighted(backend),
         }
         backend.flush();
     }
@@ -136,18 +145,18 @@ pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
         Some(Menu::Borders) => update_changes_borders(backend, changes),
         Some(Menu::Clickable) => update_changes_clickable(backend, changes),
         Some(Menu::Complex) => update_changes_complex(backend, changes),
-        Some(Menu::DynStat) => update_changes_dynstat(backend, changes),
-        Some(Menu::FixedWeighted) => update_changes_fixedweighted(backend, changes),
+        Some(Menu::Dynamic) => update_changes_dynamic(backend, changes),
+        Some(Menu::Fixed) => update_changes_fixed(backend, changes),
         Some(Menu::Focusable) => update_changes_focusable(backend, changes),
-        Some(Menu::Grid) => update_changes_grid(backend, changes),
+        Some(Menu::Hello) => update_changes_hello(backend, changes),
         Some(Menu::Margin) => update_changes_margin(backend, changes),
         Some(Menu::Pad) => update_changes_pad(backend, changes),
         Some(Menu::Popup) => update_changes_popup(backend, changes),
-        Some(Menu::Simple) => update_changes_simple(backend, changes),
+        Some(Menu::Progress) => update_changes_progress(backend, changes),
+        Some(Menu::Rows) => update_changes_rows(backend, changes),
         Some(Menu::Styled) => update_changes_styled(backend, changes),
         Some(Menu::SubStyled) => update_changes_substyled(backend, changes),
-        Some(Menu::Unequal) => update_changes_unequal(backend, changes),
-        Some(Menu::Widget) => update_changes_widget(backend, changes),
+        Some(Menu::Weighted) => update_changes_weighted(backend, changes),
         None => {}
     }
     backend.flush();
@@ -155,28 +164,24 @@ pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
 
 fn draw_borders(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 32, "Prev");
-    backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 32, "Next");
-    backend.fill_rect(3, 99, 397, 90, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 6, 128, "Label One");
-    backend.draw_border(3, 99, 397, 90, 3, rgb!(0, 255, 0));
-    backend.fill_rect(400, 99, 397, 90, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 403, 128, "Label Two");
-    backend.draw_border(400, 99, 397, 90, 3, rgb!(0, 255, 0));
-    backend.draw_border(0, 96, 800, 96, 3, rgb!(0, 255, 0));
-    backend.fill_rect(0, 192, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "Label Three");
-    backend.fill_rect(400, 192, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 402, 224, "Label Four");
-    backend.draw_border(400, 192, 400, 96, 2, rgb!(255, 255, 255));
-    backend.fill_rect(0, 291, 800, 93, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 323, "Label Five");
-    backend.fill_rect(0, 291, 800, 3, rgb!(255, 255, 255));
-    backend.fill_rect(0, 288, 800, 3, rgb!(255, 255, 255));
-    backend.fill_rect(0, 384, 800, 96, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 416, "Label Seven");
+    backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 44, "Prev");
+    backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 44, "Next");
+    backend.fill_rect(0, 120, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 164, "border= draws a border around a cell or container.");
+    backend.fill_rect(0, 240, 266, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 4, 284, "Full border");
+    backend.draw_border(0, 240, 266, 120, 4, rgb!(0, 255, 0));
+    backend.fill_rect(266, 240, 266, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 286, "Top only");
+    backend.fill_rect(266, 240, 266, 4, rgb!(255, 255, 255));
+    backend.fill_rect(532, 240, 268, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 284, "Right only");
+    backend.fill_rect(796, 240, 4, 120, rgb!(255, 255, 255));
+    backend.fill_rect(0, 360, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 3, 404, "Row border (green)");
+    backend.draw_border(0, 360, 800, 120, 3, rgb!(255, 255, 0));
 }
 
 fn draw_clickable(backend: &mut dyn Backend) {
@@ -186,101 +191,113 @@ fn draw_clickable(backend: &mut dyn Backend) {
     backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
     atlas_1().draw(backend, 400, 32, "Next");
     backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 128, "Click me!");
+    atlas_1().draw(backend, 0, 128, "press= triggers a callback method on touch/click.");
     backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "Press me!");
+    atlas_1().draw(backend, 0, 224, "Zero args — fn click()");
     backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 320, "Touch me!");
+    atlas_1().draw(backend, 0, 320, "One arg  — fn action(args)");
     backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 416, "Two args — fn action(args)");
 }
 
 fn draw_complex(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 240, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 104, "Prev");
-    backend.fill_rect(400, 0, 400, 240, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 104, "Next");
-    backend.fill_rect(0, 240, 400, 120, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 284, "Label One");
-    backend.fill_rect(0, 360, 400, 120, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 404, "Label Two");
-    backend.fill_rect(400, 240, 200, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 264, "Label Three");
-    backend.fill_rect(600, 240, 200, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 600, 264, "Label Four");
-    backend.fill_rect(400, 320, 133, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 344, "Label Five");
-    backend.fill_rect(533, 320, 133, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 533, 344, "Label Six");
-    backend.fill_rect(666, 320, 134, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 666, 344, "Label Seven");
-    backend.fill_rect(400, 400, 400, 80, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 424, "Click!");
-}
-
-fn draw_dynstat(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 400, 160, rgb!(0, 0, 0));
     atlas_1().draw(backend, 0, 64, "Prev");
     backend.fill_rect(400, 0, 400, 160, rgb!(0, 0, 0));
     atlas_1().draw(backend, 400, 64, "Next");
     backend.fill_rect(0, 160, 800, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "Simple Label");
-    backend.fill_rect(0, 320, 800, 160, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 224, "Containers nest freely (col in row, row in col...).");
+    backend.fill_rect(0, 320, 400, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 344, "Top-left");
+    backend.fill_rect(0, 400, 400, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 424, "Bottom-left");
+    backend.fill_rect(400, 320, 200, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 344, "Top-right A");
+    backend.fill_rect(600, 320, 200, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 600, 344, "Top-right B");
+    backend.fill_rect(400, 400, 133, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 424, "Bottom-right A");
+    backend.fill_rect(533, 400, 133, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 533, 424, "Bottom-right B");
+    backend.fill_rect(666, 400, 134, 80, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 666, 424, "Bottom-right C");
 }
 
-fn draw_fixedweighted(backend: &mut dyn Backend) {
+fn draw_dynamic(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 800, 50, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 9, "Little");
-    backend.fill_rect(0, 50, 800, 143, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 105, "Big");
-    backend.fill_rect(0, 193, 800, 287, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 320, "Bigger");
+    backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 32, "Prev");
+    backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 32, "Next");
+    backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 128, "lbl= cells are updated at runtime via update_changes().");
+    backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 224, "Static text stays fixed.");
+    backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
+    backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
+}
+
+fn draw_fixed(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 26, "Prev");
+    backend.fill_rect(400, 0, 400, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 26, "Next");
+    backend.fill_rect(0, 84, 800, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 110, "size= fixes a child's height (or width in row).");
+    backend.fill_rect(0, 168, 800, 60, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 182, "Little");
+    backend.fill_rect(0, 228, 800, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 254, "Weighted (weight=1, gets rest)");
+    backend.fill_rect(0, 312, 800, 168, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 380, "Bigger");
 }
 
 fn draw_focusable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 800, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 64, "This one yes");
-    backend.fill_rect(0, 160, 800, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "This one no");
-    backend.fill_rect(0, 320, 800, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 384, "Also no");
+    backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 32, "Prev");
+    backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 32, "Next");
+    backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 128, "Press a cell to focus it (thick border from style.focused).");
+    backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 224, "Focusable — tap me!");
+    backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 320, "Not focusable (explicit)");
+    backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 416, "Also not focusable (no press, no focusable=true)");
 }
 
-fn draw_grid(backend: &mut dyn Backend) {
+fn draw_hello(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 44, "Prev");
+    backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 44, "Next");
+    backend.fill_rect(0, 120, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 164, "Static text in a column layout.");
+    backend.fill_rect(0, 240, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 284, "Each child gets equal height.");
+    backend.fill_rect(0, 360, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 404, "Text is vertically centered.");
+}
+
+fn draw_margin(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 400, 160, rgb!(0, 0, 0));
     atlas_1().draw(backend, 0, 64, "Prev");
     backend.fill_rect(400, 0, 400, 160, rgb!(0, 0, 0));
     atlas_1().draw(backend, 400, 64, "Next");
-    backend.fill_rect(0, 160, 400, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "Label One");
-    backend.fill_rect(400, 160, 400, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 224, "Label Two");
-    backend.fill_rect(0, 320, 400, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 384, "Label Three");
-    backend.fill_rect(400, 320, 400, 160, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 384, "Label Four");
-}
-
-fn draw_margin(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(15, 15, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 15, 47, "Prev");
-    backend.fill_rect(405, 15, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 405, 47, "Next");
-    backend.fill_rect(15, 132, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 15, 164, "Label One");
-    backend.fill_rect(405, 132, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 405, 164, "Label Two");
-    backend.fill_rect(15, 249, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 15, 281, "Label Three");
-    backend.fill_rect(405, 249, 380, 97, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 405, 281, "Label Four");
-    backend.fill_rect(15, 366, 770, 99, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 15, 399, "Label Five");
+    backend.fill_rect(0, 160, 800, 160, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 224, "margin= shrinks a child from all sides (external space).");
+    backend.fill_rect(0, 320, 266, 160, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 384, "margin 0 (normal)");
+    backend.fill_rect(286, 340, 226, 120, rgb!(0, 0, 255));
+    atlas_2().draw(backend, 286, 384, "margin 20");
+    backend.fill_rect(537, 325, 258, 150, rgb!(0, 255, 0));
+    atlas_3().draw(backend, 537, 384, "margin 5");
 }
 
 fn draw_pad(backend: &mut dyn Backend) {
@@ -289,136 +306,132 @@ fn draw_pad(backend: &mut dyn Backend) {
     atlas_1().draw(backend, 20, 70, "Prev");
     backend.fill_rect(400, 20, 380, 133, rgb!(0, 0, 0));
     atlas_1().draw(backend, 400, 70, "Next");
-    backend.fill_rect(20, 173, 380, 133, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 20, 223, "Label One");
-    backend.fill_rect(400, 173, 380, 133, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 223, "Label Two");
+    backend.fill_rect(10, 163, 780, 153, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 10, 223, "pad= adds internal space on all sides.");
     backend.fill_rect(20, 326, 380, 134, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 20, 377, "Label Three");
+    atlas_1().draw(backend, 20, 377, "Big left pad");
     backend.fill_rect(400, 326, 380, 134, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 377, "Label Four");
+    atlas_1().draw(backend, 400, 377, "Bottom pad");
 }
 
 fn draw_popup(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(200, 60, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 200, 80, "Prev");
-    backend.fill_rect(400, 60, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 80, "Next");
-    backend.fill_rect(200, 132, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 200, 152, "Label One");
-    backend.fill_rect(400, 132, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 152, "Label Two");
-    backend.fill_rect(200, 204, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 200, 224, "Label Three");
-    backend.fill_rect(400, 204, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 224, "Label Four");
-    backend.fill_rect(200, 276, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 200, 296, "Label Five");
-    backend.fill_rect(400, 276, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 296, "Label Six");
-    backend.fill_rect(200, 348, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 200, 368, "Label Seven");
-    backend.fill_rect(400, 348, 200, 72, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 368, "Label Eight");
+    backend.fill_rect(200, 72, 200, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 200, 98, "Prev");
+    backend.fill_rect(400, 72, 200, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 98, "Next");
+    backend.fill_rect(200, 156, 400, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 200, 182, "size= shrinks the menu; align= positions it.");
+    backend.fill_rect(200, 240, 400, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 200, 266, "anchor= chooses which point of the");
+    backend.fill_rect(200, 324, 400, 84, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 200, 350, "menu the align coordinate refers to.");
 }
 
-fn draw_simple(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 32, "Prev");
-    backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 32, "Next");
-    backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 128, "Item One");
-    backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 224, "Item Two");
-    backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 320, "Item One");
-    backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 416, "More Text");
-}
-
-fn draw_styled(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 64, "Prev");
-    backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 64, "Next");
-    backend.fill_rect(0, 160, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 224, "Label One");
-    backend.fill_rect(400, 160, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 224, "Label Two");
-    backend.fill_rect(0, 320, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 384, "Label Three");
-    backend.fill_rect(400, 320, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 384, "Label Four");
-}
-
-fn draw_substyled(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 64, "Prev");
-    backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 64, "Next");
-    backend.fill_rect(0, 160, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 0, 224, "Label One");
-    backend.fill_rect(400, 160, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 224, "Label Two");
-    backend.fill_rect(0, 320, 400, 160, rgb!(0, 255, 0));
-    atlas_3().draw(backend, 0, 388, "Label Three");
-    backend.fill_rect(400, 320, 400, 160, rgb!(0, 255, 0));
-    atlas_2().draw(backend, 400, 384, "Label Four");
-}
-
-fn draw_unequal(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 18, "Prev");
-    backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 18, "Next");
-    backend.fill_rect(0, 68, 400, 68, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 86, "Label One");
-    backend.fill_rect(400, 68, 400, 68, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 86, "Label Two");
-    backend.fill_rect(0, 136, 400, 205, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 222, "Label Three");
-    backend.fill_rect(400, 136, 400, 205, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 222, "Label Four");
-    backend.fill_rect(0, 341, 400, 139, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 394, "Label Five");
-    backend.fill_rect(400, 341, 400, 139, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 400, 394, "Label Six");
-}
-
-fn draw_widget(backend: &mut dyn Backend) {
+fn draw_progress(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
     atlas_1().draw(backend, 0, 44, "Prev");
     backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
     atlas_1().draw(backend, 400, 44, "Next");
     backend.fill_rect(0, 120, 800, 120, rgb!(0, 0, 0));
-    atlas_1().draw(backend, 0, 164, "Simple Label");
+    atlas_1().draw(backend, 0, 164, "render=\"progress bar\" draws a filled bar (value in [0,1]).");
     backend.fill_rect(0, 240, 800, 120, rgb!(0, 0, 0));
     backend.fill_rect(0, 360, 800, 120, rgb!(0, 0, 0));
 }
 
+fn draw_rows(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 44, "Prev");
+    backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 44, "Next");
+    backend.fill_rect(0, 120, 800, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 164, "Row layout: children side by side.");
+    backend.fill_rect(0, 240, 266, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 284, "Left cell");
+    backend.fill_rect(266, 240, 266, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 284, "Center cell");
+    backend.fill_rect(532, 240, 268, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 284, "Right cell");
+    backend.fill_rect(0, 360, 200, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 404, "A");
+    backend.fill_rect(200, 360, 200, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 200, 404, "B");
+    backend.fill_rect(400, 360, 200, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 404, "C");
+    backend.fill_rect(600, 360, 200, 120, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 600, 404, "D");
+}
+
+fn draw_styled(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 0, 44, "Prev");
+    backend.fill_rect(400, 0, 400, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 400, 44, "Next");
+    backend.fill_rect(0, 120, 800, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 0, 164, "bg= and fg= apply to the whole menu.");
+    backend.fill_rect(0, 240, 800, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 0, 284, "Children inherit parent style.");
+    backend.fill_rect(0, 360, 400, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 0, 404, "All children");
+    backend.fill_rect(400, 360, 400, 120, rgb!(0, 255, 0));
+    atlas_4().draw(backend, 400, 404, "see green bg");
+}
+
+fn draw_substyled(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
+    atlas_3().draw(backend, 0, 64, "Prev");
+    backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
+    atlas_3().draw(backend, 400, 64, "Next");
+    backend.fill_rect(0, 160, 800, 160, rgb!(0, 255, 0));
+    atlas_3().draw(backend, 0, 224, "Style on a child overrides just that child.");
+    backend.fill_rect(0, 320, 266, 160, rgb!(0, 0, 255));
+    atlas_2().draw(backend, 0, 384, "Blue cell");
+    backend.fill_rect(266, 320, 266, 160, rgb!(0, 255, 0));
+    atlas_3().draw(backend, 266, 384, "Green (inherited)");
+    backend.fill_rect(532, 320, 268, 160, rgb!(255, 0, 0));
+    atlas_5().draw(backend, 532, 384, "Red cell");
+}
+
+fn draw_weighted(backend: &mut dyn Backend) {
+    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
+    backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 18, "Prev");
+    backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 18, "Next");
+    backend.fill_rect(0, 68, 800, 68, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 86, "weight= controls proportional space.");
+    backend.fill_rect(0, 136, 400, 137, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 188, "weight 1");
+    backend.fill_rect(400, 136, 400, 137, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 400, 188, "weight 2 (double)");
+    backend.fill_rect(0, 273, 266, 207, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 0, 360, "1");
+    backend.fill_rect(266, 273, 266, 207, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 266, 360, "3 (triple)");
+    backend.fill_rect(532, 273, 268, 207, rgb!(0, 0, 0));
+    atlas_1().draw(backend, 532, 360, "1");
+}
+
 fn draw_focus_borders(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 32, "Prev");
-        backend.draw_border(0, 0, 400, 96, 10, rgb!(255, 255, 255));
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 44, "Prev");
+        backend.draw_border(0, 0, 400, 120, 10, rgb!(255, 255, 255));
     } else {
-        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 32, "Prev");
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 44, "Prev");
     }
     if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 410, 32, "Next");
-        backend.draw_border(400, 0, 400, 96, 10, rgb!(255, 255, 255));
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 44, "Next");
+        backend.draw_border(400, 0, 400, 120, 10, rgb!(255, 255, 255));
     } else {
-        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 400, 32, "Next");
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 44, "Next");
     }
 }
 
@@ -440,58 +453,33 @@ fn draw_focus_clickable(backend: &mut dyn Backend, focused: Option<usize>) {
         atlas_1().draw(backend, 400, 32, "Next");
     }
     if focused == Some(2) {
-        backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 128, "Click me!");
-        backend.draw_border(0, 96, 800, 96, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 96, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 128, "Click me!");
-    }
-    if focused == Some(3) {
         backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 224, "Press me!");
+        atlas_1().draw(backend, 10, 224, "Zero args — fn click()");
         backend.draw_border(0, 192, 800, 96, 10, rgb!(255, 255, 255));
     } else {
         backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 224, "Press me!");
+        atlas_1().draw(backend, 0, 224, "Zero args — fn click()");
     }
-    if focused == Some(4) {
+    if focused == Some(3) {
         backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 320, "Touch me!");
+        atlas_1().draw(backend, 10, 320, "One arg  — fn action(args)");
         backend.draw_border(0, 288, 800, 96, 10, rgb!(255, 255, 255));
     } else {
         backend.fill_rect(0, 288, 800, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 320, "Touch me!");
+        atlas_1().draw(backend, 0, 320, "One arg  — fn action(args)");
     }
-    if focused == Some(5) {
+    if focused == Some(4) {
         backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 416, "Two args — fn action(args)");
         backend.draw_border(0, 384, 800, 96, 10, rgb!(255, 255, 255));
     } else {
         backend.fill_rect(0, 384, 800, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 416, "Two args — fn action(args)");
     }
 }
 
 fn draw_focus_complex(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 240, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 104, "Prev");
-        backend.draw_border(0, 0, 400, 240, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 0, 400, 240, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 104, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 240, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 410, 104, "Next");
-        backend.draw_border(400, 0, 400, 240, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(400, 0, 400, 240, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 400, 104, "Next");
-    }
-}
-
-fn draw_focus_dynstat(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
         backend.fill_rect(0, 0, 400, 160, rgb!(0, 0, 0));
         atlas_1().draw(backend, 10, 64, "Prev");
         backend.draw_border(0, 0, 400, 160, 10, rgb!(255, 255, 255));
@@ -506,21 +494,94 @@ fn draw_focus_dynstat(backend: &mut dyn Backend, focused: Option<usize>) {
     } else {
         backend.fill_rect(400, 0, 400, 160, rgb!(0, 0, 0));
         atlas_1().draw(backend, 400, 64, "Next");
+    }
+}
+
+fn draw_focus_dynamic(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 32, "Prev");
+        backend.draw_border(0, 0, 400, 96, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 32, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 32, "Next");
+        backend.draw_border(400, 0, 400, 96, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 32, "Next");
+    }
+}
+
+fn draw_focus_fixed(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 26, "Prev");
+        backend.draw_border(0, 0, 400, 84, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 26, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 26, "Next");
+        backend.draw_border(400, 0, 400, 84, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 26, "Next");
     }
 }
 
 fn draw_focus_focusable(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
-        backend.fill_rect(0, 0, 800, 160, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 64, "This one yes");
-        backend.draw_border(0, 0, 800, 160, 10, rgb!(255, 255, 255));
+        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 32, "Prev");
+        backend.draw_border(0, 0, 400, 96, 10, rgb!(255, 255, 255));
     } else {
-        backend.fill_rect(0, 0, 800, 160, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 64, "This one yes");
+        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 32, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 32, "Next");
+        backend.draw_border(400, 0, 400, 96, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 32, "Next");
+    }
+    if focused == Some(2) {
+        backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 224, "Focusable — tap me!");
+        backend.draw_border(0, 192, 800, 96, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 192, 800, 96, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 224, "Focusable — tap me!");
     }
 }
 
-fn draw_focus_grid(backend: &mut dyn Backend, focused: Option<usize>) {
+fn draw_focus_hello(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 44, "Prev");
+        backend.draw_border(0, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 44, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 44, "Next");
+        backend.draw_border(400, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 44, "Next");
+    }
+}
+
+fn draw_focus_margin(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
         backend.fill_rect(0, 0, 400, 160, rgb!(0, 0, 0));
         atlas_1().draw(backend, 10, 64, "Prev");
@@ -536,25 +597,6 @@ fn draw_focus_grid(backend: &mut dyn Backend, focused: Option<usize>) {
     } else {
         backend.fill_rect(400, 0, 400, 160, rgb!(0, 0, 0));
         atlas_1().draw(backend, 400, 64, "Next");
-    }
-}
-
-fn draw_focus_margin(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(15, 15, 380, 97, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 25, 47, "Prev");
-        backend.draw_border(15, 15, 380, 97, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(15, 15, 380, 97, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 15, 47, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(405, 15, 380, 97, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 415, 47, "Next");
-        backend.draw_border(405, 15, 380, 97, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(405, 15, 380, 97, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 405, 47, "Next");
     }
 }
 
@@ -579,100 +621,24 @@ fn draw_focus_pad(backend: &mut dyn Backend, focused: Option<usize>) {
 
 fn draw_focus_popup(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
-        backend.fill_rect(200, 60, 200, 72, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 210, 80, "Prev");
-        backend.draw_border(200, 60, 200, 72, 10, rgb!(255, 255, 255));
+        backend.fill_rect(200, 72, 200, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 210, 98, "Prev");
+        backend.draw_border(200, 72, 200, 84, 10, rgb!(255, 255, 255));
     } else {
-        backend.fill_rect(200, 60, 200, 72, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 200, 80, "Prev");
+        backend.fill_rect(200, 72, 200, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 200, 98, "Prev");
     }
     if focused == Some(1) {
-        backend.fill_rect(400, 60, 200, 72, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 410, 80, "Next");
-        backend.draw_border(400, 60, 200, 72, 10, rgb!(255, 255, 255));
+        backend.fill_rect(400, 72, 200, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 98, "Next");
+        backend.draw_border(400, 72, 200, 84, 10, rgb!(255, 255, 255));
     } else {
-        backend.fill_rect(400, 60, 200, 72, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 400, 80, "Next");
+        backend.fill_rect(400, 72, 200, 84, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 98, "Next");
     }
 }
 
-fn draw_focus_simple(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 32, "Prev");
-        backend.draw_border(0, 0, 400, 96, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 32, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 410, 32, "Next");
-        backend.draw_border(400, 0, 400, 96, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(400, 0, 400, 96, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 400, 32, "Next");
-    }
-}
-
-fn draw_focus_styled(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 10, 64, "Prev");
-        backend.draw_border(0, 0, 400, 160, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 0, 64, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 410, 64, "Next");
-        backend.draw_border(400, 0, 400, 160, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 400, 64, "Next");
-    }
-}
-
-fn draw_focus_substyled(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 10, 64, "Prev");
-        backend.draw_border(0, 0, 400, 160, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 0, 64, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 410, 64, "Next");
-        backend.draw_border(400, 0, 400, 160, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
-        atlas_2().draw(backend, 400, 64, "Next");
-    }
-}
-
-fn draw_focus_unequal(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 10, 18, "Prev");
-        backend.draw_border(0, 0, 400, 68, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 0, 18, "Prev");
-    }
-    if focused == Some(1) {
-        backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 410, 18, "Next");
-        backend.draw_border(400, 0, 400, 68, 10, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
-        atlas_1().draw(backend, 400, 18, "Next");
-    }
-}
-
-fn draw_focus_widget(backend: &mut dyn Backend, focused: Option<usize>) {
+fn draw_focus_progress(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
         backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
         atlas_1().draw(backend, 10, 44, "Prev");
@@ -691,18 +657,94 @@ fn draw_focus_widget(backend: &mut dyn Backend, focused: Option<usize>) {
     }
 }
 
+fn draw_focus_rows(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 44, "Prev");
+        backend.draw_border(0, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 44, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 44, "Next");
+        backend.draw_border(400, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 44, "Next");
+    }
+}
+
+fn draw_focus_styled(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 255, 0));
+        atlas_4().draw(backend, 10, 44, "Prev");
+        backend.draw_border(0, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 120, rgb!(0, 255, 0));
+        atlas_4().draw(backend, 0, 44, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 255, 0));
+        atlas_4().draw(backend, 410, 44, "Next");
+        backend.draw_border(400, 0, 400, 120, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 120, rgb!(0, 255, 0));
+        atlas_4().draw(backend, 400, 44, "Next");
+    }
+}
+
+fn draw_focus_substyled(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
+        atlas_3().draw(backend, 10, 64, "Prev");
+        backend.draw_border(0, 0, 400, 160, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 160, rgb!(0, 255, 0));
+        atlas_3().draw(backend, 0, 64, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
+        atlas_3().draw(backend, 410, 64, "Next");
+        backend.draw_border(400, 0, 400, 160, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 160, rgb!(0, 255, 0));
+        atlas_3().draw(backend, 400, 64, "Next");
+    }
+}
+
+fn draw_focus_weighted(backend: &mut dyn Backend, focused: Option<usize>) {
+    if focused == Some(0) {
+        backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 10, 18, "Prev");
+        backend.draw_border(0, 0, 400, 68, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(0, 0, 400, 68, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 0, 18, "Prev");
+    }
+    if focused == Some(1) {
+        backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 410, 18, "Next");
+        backend.draw_border(400, 0, 400, 68, 10, rgb!(255, 255, 255));
+    } else {
+        backend.fill_rect(400, 0, 400, 68, rgb!(0, 0, 0));
+        atlas_1().draw(backend, 400, 18, "Next");
+    }
+}
+
 fn update_events_borders<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x < 400 && *y < 96 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 96 { Some(1) }
+                if *x < 400 && *y < 120 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 96 {
-                state.nav(&["Widget"]);
+            if *x < 400 && *y < 120 {
+                state.nav(&["Margin"]);
             }
-            if *x >= 400 && *x < 800 && *y < 96 {
+            if *x >= 400 && *x < 800 && *y < 120 {
                 state.nav(&["Clickable"]);
             }
         }
@@ -715,29 +757,25 @@ fn update_events_clickable<C: Callbacks>(events: &[InputEvent], state: &mut C) {
             let new_focus =
                 if *x < 400 && *y < 96 { Some(0) }
                 else if *x >= 400 && *x < 800 && *y < 96 { Some(1) }
-                else if *x < 800 && *y >= 96 && *y < 192 { Some(2) }
-                else if *x < 800 && *y >= 192 && *y < 288 { Some(3) }
-                else if *x < 800 && *y >= 288 && *y < 384 { Some(4) }
-                else if *x < 800 && *y >= 384 && *y < 480 { Some(5) }
+                else if *x < 800 && *y >= 192 && *y < 288 { Some(2) }
+                else if *x < 800 && *y >= 288 && *y < 384 { Some(3) }
+                else if *x < 800 && *y >= 384 && *y < 480 { Some(4) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
             if *x < 400 && *y < 96 {
                 state.nav(&["Borders"]);
             }
             if *x >= 400 && *x < 800 && *y < 96 {
-                state.nav(&["Complex"]);
-            }
-            if *x < 800 && *y >= 96 && *y < 192 {
-                state.function_cl();
+                state.nav(&["Focusable"]);
             }
             if *x < 800 && *y >= 192 && *y < 288 {
-                state.function_pr(&["hello"]);
+                state.click();
             }
             if *x < 800 && *y >= 288 && *y < 384 {
-                state.fn_multi(&["a", "b"]);
+                state.action(&["hello"]);
             }
             if *x < 800 && *y >= 384 && *y < 480 {
-                state.fn3();
+                state.action(&["a", "b"]);
             }
         }
     }
@@ -747,65 +785,88 @@ fn update_events_complex<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x < 400 && *y < 240 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 240 { Some(1) }
+                if *x < 400 && *y < 160 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 160 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 240 {
+            if *x < 400 && *y < 160 {
+                state.nav(&["Popup"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 160 {
+                state.nav(&["Hello"]);
+            }
+        }
+    }
+}
+
+fn update_events_dynamic<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+    for ev in events {
+        if let InputEvent::Press { x, y } = ev {
+            let new_focus =
+                if *x < 400 && *y < 96 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 96 { Some(1) }
+                else { None };
+            *FOCUSED.lock().unwrap() = new_focus;
+            if *x < 400 && *y < 96 {
+                state.nav(&["Focusable"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 96 {
+                state.nav(&["Progress"]);
+            }
+        }
+    }
+}
+
+fn update_events_fixed<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+    for ev in events {
+        if let InputEvent::Press { x, y } = ev {
+            let new_focus =
+                if *x < 400 && *y < 84 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 84 { Some(1) }
+                else { None };
+            *FOCUSED.lock().unwrap() = new_focus;
+            if *x < 400 && *y < 84 {
+                state.nav(&["Weighted"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 84 {
+                state.nav(&["Styled"]);
+            }
+        }
+    }
+}
+
+fn update_events_focusable<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+    for ev in events {
+        if let InputEvent::Press { x, y } = ev {
+            let new_focus =
+                if *x < 400 && *y < 96 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 96 { Some(1) }
+                else if *x < 800 && *y >= 192 && *y < 288 { Some(2) }
+                else { None };
+            *FOCUSED.lock().unwrap() = new_focus;
+            if *x < 400 && *y < 96 {
                 state.nav(&["Clickable"]);
             }
-            if *x >= 400 && *x < 800 && *y < 240 {
-                state.nav(&["DynStat"]);
-            }
-            if *x >= 400 && *x < 800 && *y >= 400 && *y < 480 {
-                state.click();
+            if *x >= 400 && *x < 800 && *y < 96 {
+                state.nav(&["Dynamic"]);
             }
         }
     }
 }
 
-fn update_events_dynstat<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+fn update_events_hello<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x < 400 && *y < 160 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 160 { Some(1) }
+                if *x < 400 && *y < 120 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 160 {
+            if *x < 400 && *y < 120 {
                 state.nav(&["Complex"]);
             }
-            if *x >= 400 && *x < 800 && *y < 160 {
-                state.nav(&["Grid"]);
-            }
-        }
-    }
-}
-
-fn update_events_fixedweighted<C: Callbacks>(_events: &[InputEvent], _state: &mut C) {
-}
-
-fn update_events_focusable<C: Callbacks>(events: &[InputEvent], _state: &mut C) {
-    for ev in events {
-        if let InputEvent::Press { x, y } = ev {
-            *FOCUSED.lock().unwrap() = if *x < 800 && *y < 160 { Some(0) } else { None };
-        }
-    }
-}
-
-fn update_events_grid<C: Callbacks>(events: &[InputEvent], state: &mut C) {
-    for ev in events {
-        if let InputEvent::Press { x, y } = ev {
-            let new_focus =
-                if *x < 400 && *y < 160 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 160 { Some(1) }
-                else { None };
-            *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 160 {
-                state.nav(&["DynStat"]);
-            }
-            if *x >= 400 && *x < 800 && *y < 160 {
-                state.nav(&["Margin"]);
+            if *x >= 400 && *x < 800 && *y < 120 {
+                state.nav(&["Rows"]);
             }
         }
     }
@@ -815,15 +876,15 @@ fn update_events_margin<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x >= 15 && *x < 395 && *y >= 15 && *y < 112 { Some(0) }
-                else if *x >= 405 && *x < 785 && *y >= 15 && *y < 112 { Some(1) }
+                if *x < 400 && *y < 160 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 160 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x >= 15 && *x < 395 && *y >= 15 && *y < 112 {
-                state.nav(&["Grid"]);
-            }
-            if *x >= 405 && *x < 785 && *y >= 15 && *y < 112 {
+            if *x < 400 && *y < 160 {
                 state.nav(&["Pad"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 160 {
+                state.nav(&["Borders"]);
             }
         }
     }
@@ -838,10 +899,10 @@ fn update_events_pad<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
             if *x >= 20 && *x < 400 && *y >= 20 && *y < 153 {
-                state.nav(&["Margin"]);
+                state.nav(&["SubStyled"]);
             }
             if *x >= 400 && *x < 780 && *y >= 20 && *y < 153 {
-                state.nav(&["Popup"]);
+                state.nav(&["Margin"]);
             }
         }
     }
@@ -851,33 +912,51 @@ fn update_events_popup<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x >= 200 && *x < 400 && *y >= 60 && *y < 132 { Some(0) }
-                else if *x >= 400 && *x < 600 && *y >= 60 && *y < 132 { Some(1) }
+                if *x >= 200 && *x < 400 && *y >= 72 && *y < 156 { Some(0) }
+                else if *x >= 400 && *x < 600 && *y >= 72 && *y < 156 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x >= 200 && *x < 400 && *y >= 60 && *y < 132 {
-                state.nav(&["Pad"]);
+            if *x >= 200 && *x < 400 && *y >= 72 && *y < 156 {
+                state.nav(&["Progress"]);
             }
-            if *x >= 400 && *x < 600 && *y >= 60 && *y < 132 {
-                state.nav(&["Simple"]);
+            if *x >= 400 && *x < 600 && *y >= 72 && *y < 156 {
+                state.nav(&["Complex"]);
             }
         }
     }
 }
 
-fn update_events_simple<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+fn update_events_progress<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x < 400 && *y < 96 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 96 { Some(1) }
+                if *x < 400 && *y < 120 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 96 {
+            if *x < 400 && *y < 120 {
+                state.nav(&["Dynamic"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 120 {
                 state.nav(&["Popup"]);
             }
-            if *x >= 400 && *x < 800 && *y < 96 {
-                state.nav(&["Styled"]);
+        }
+    }
+}
+
+fn update_events_rows<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+    for ev in events {
+        if let InputEvent::Press { x, y } = ev {
+            let new_focus =
+                if *x < 400 && *y < 120 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
+                else { None };
+            *FOCUSED.lock().unwrap() = new_focus;
+            if *x < 400 && *y < 120 {
+                state.nav(&["Hello"]);
+            }
+            if *x >= 400 && *x < 800 && *y < 120 {
+                state.nav(&["Weighted"]);
             }
         }
     }
@@ -887,14 +966,14 @@ fn update_events_styled<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
-                if *x < 400 && *y < 160 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 160 { Some(1) }
+                if *x < 400 && *y < 120 { Some(0) }
+                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 160 {
-                state.nav(&["Simple"]);
+            if *x < 400 && *y < 120 {
+                state.nav(&["Fixed"]);
             }
-            if *x >= 400 && *x < 800 && *y < 160 {
+            if *x >= 400 && *x < 800 && *y < 120 {
                 state.nav(&["SubStyled"]);
             }
         }
@@ -913,13 +992,13 @@ fn update_events_substyled<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 state.nav(&["Styled"]);
             }
             if *x >= 400 && *x < 800 && *y < 160 {
-                state.nav(&["Unequal"]);
+                state.nav(&["Pad"]);
             }
         }
     }
 }
 
-fn update_events_unequal<C: Callbacks>(events: &[InputEvent], state: &mut C) {
+fn update_events_weighted<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
             let new_focus =
@@ -928,28 +1007,10 @@ fn update_events_unequal<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
             if *x < 400 && *y < 68 {
-                state.nav(&["SubStyled"]);
+                state.nav(&["Rows"]);
             }
             if *x >= 400 && *x < 800 && *y < 68 {
-                state.nav(&["Widget"]);
-            }
-        }
-    }
-}
-
-fn update_events_widget<C: Callbacks>(events: &[InputEvent], state: &mut C) {
-    for ev in events {
-        if let InputEvent::Press { x, y } = ev {
-            let new_focus =
-                if *x < 400 && *y < 120 { Some(0) }
-                else if *x >= 400 && *x < 800 && *y < 120 { Some(1) }
-                else { None };
-            *FOCUSED.lock().unwrap() = new_focus;
-            if *x < 400 && *y < 120 {
-                state.nav(&["Unequal"]);
-            }
-            if *x >= 400 && *x < 800 && *y < 120 {
-                state.nav(&["Borders"]);
+                state.nav(&["Fixed"]);
             }
         }
     }
@@ -959,15 +1020,7 @@ fn update_changes_borders(backend: &mut dyn Backend, _changes: &[(&str, &str)]) 
     draw_focus_borders(backend, *FOCUSED.lock().unwrap());
 }
 
-fn update_changes_clickable(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
-    backend.render(&mut |fb, stride| {
-        for &(name, val) in changes {
-            if name == "parameter One" {
-                atlas_1().blit(fb, stride, 0, 416,
-                    &format!("{:<47}", val));
-            }
-        }
-    });
+fn update_changes_clickable(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
     draw_focus_clickable(backend, *FOCUSED.lock().unwrap());
 }
 
@@ -975,27 +1028,31 @@ fn update_changes_complex(backend: &mut dyn Backend, _changes: &[(&str, &str)]) 
     draw_focus_complex(backend, *FOCUSED.lock().unwrap());
 }
 
-fn update_changes_dynstat(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
+fn update_changes_dynamic(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
     backend.render(&mut |fb, stride| {
         for &(name, val) in changes {
-            if name == "parameter One" {
-                atlas_1().blit(fb, stride, 0, 384,
-                    &format!("{:<47}", val));
+            match name {
+                "parameter One" => atlas_1().blit(fb, stride, 0, 320,
+                    &format!("{:<47}", val)),
+                "parameter Two" => atlas_1().blit(fb, stride, 0, 416,
+                    &format!("{:<47}", val)),
+                _ => {}
             }
         }
     });
-    draw_focus_dynstat(backend, *FOCUSED.lock().unwrap());
+    draw_focus_dynamic(backend, *FOCUSED.lock().unwrap());
 }
 
-fn update_changes_fixedweighted(_backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+fn update_changes_fixed(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_fixed(backend, *FOCUSED.lock().unwrap());
 }
 
 fn update_changes_focusable(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
     draw_focus_focusable(backend, *FOCUSED.lock().unwrap());
 }
 
-fn update_changes_grid(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    draw_focus_grid(backend, *FOCUSED.lock().unwrap());
+fn update_changes_hello(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_hello(backend, *FOCUSED.lock().unwrap());
 }
 
 fn update_changes_margin(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
@@ -1010,32 +1067,20 @@ fn update_changes_popup(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
     draw_focus_popup(backend, *FOCUSED.lock().unwrap());
 }
 
-fn update_changes_simple(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    draw_focus_simple(backend, *FOCUSED.lock().unwrap());
-}
-
-fn update_changes_styled(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    draw_focus_styled(backend, *FOCUSED.lock().unwrap());
-}
-
-fn update_changes_substyled(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    draw_focus_substyled(backend, *FOCUSED.lock().unwrap());
-}
-
-fn update_changes_unequal(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    draw_focus_unequal(backend, *FOCUSED.lock().unwrap());
-}
-
-fn update_changes_widget(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
-    backend.render(&mut |fb, stride| {
-        for &(name, val) in changes {
-            if name == "parameter One" {
-                atlas_1().blit(fb, stride, 0, 284,
-                    &format!("{:<47}", val));
+fn update_changes_progress(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
+    for &(name, val) in changes {
+        if name == "parameter One" {
+            if let Ok(v) = val.parse::<f32>() {
+                let v = v.clamp(0.0, 1.0);
+                let filled = (800.0_f32 * v) as usize;
+                if filled > 0 {
+                    backend.fill_rect(0, 240, filled, 120, rgb!(255, 255, 255));
+                }
+                if filled < 800 {
+                    backend.fill_rect(filled, 240, 800 - filled, 120, rgb!(0, 0, 0));
+                }
             }
         }
-    });
-    for &(name, val) in changes {
         if name == "parameter Two" {
             if let Ok(v) = val.parse::<f32>() {
                 let v = v.clamp(0.0, 1.0);
@@ -1049,6 +1094,22 @@ fn update_changes_widget(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
             }
         }
     }
-    draw_focus_widget(backend, *FOCUSED.lock().unwrap());
+    draw_focus_progress(backend, *FOCUSED.lock().unwrap());
+}
+
+fn update_changes_rows(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_rows(backend, *FOCUSED.lock().unwrap());
+}
+
+fn update_changes_styled(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_styled(backend, *FOCUSED.lock().unwrap());
+}
+
+fn update_changes_substyled(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_substyled(backend, *FOCUSED.lock().unwrap());
+}
+
+fn update_changes_weighted(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
+    draw_focus_weighted(backend, *FOCUSED.lock().unwrap());
 }
 

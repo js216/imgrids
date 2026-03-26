@@ -14,11 +14,8 @@ impl ui::Callbacks for GuiState {
             self.menu = m;
         }
     }
-    fn function_cl(&mut self)              { println!("function_cl"); }
-    fn function_pr(&mut self, args: &[&str]) { println!("function_pr {:?}", args); }
-    fn fn_multi   (&mut self, args: &[&str]) { println!("fn_multi {:?}", args); }
-    fn fn3        (&mut self)              { println!("fn3"); }
-    fn click      (&mut self)              { println!("click"); }
+    fn click (&mut self)              { println!("click"); }
+    fn action(&mut self, args: &[&str]) { println!("action {:?}", args); }
 }
 
 fn current_values(t: f32) -> [(&'static str, String); 2] {
@@ -30,7 +27,7 @@ fn current_values(t: f32) -> [(&'static str, String); 2] {
 
 fn main() {
     let mut backend = imgrids::init(800, 480);
-    let mut state = GuiState { menu: ui::Menu::Simple, quit: false, t: 0.0 };
+    let mut state = GuiState { menu: ui::Menu::Hello, quit: false, t: 0.0 };
 
     loop {
         let raw = current_values(state.t);
