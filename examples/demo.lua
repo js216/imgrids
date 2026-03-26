@@ -45,7 +45,7 @@ menus = {
    -- ── 1. Static text, col layout ──────────────────────────────────────────
    -- "col" stacks children vertically; each child gets equal height by default.
    Hello = {"col",
-      {"row", {"Prev", press={"nav", "Complex"}}, {"Next", press={"nav", "Rows"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Complex"}}, {"Next", press={"nav", "Rows"}}},
       "Static text in a column layout.",
       "Each child gets equal height.",
       "Text is vertically centered.",
@@ -54,7 +54,7 @@ menus = {
    -- ── 2. Row layout ───────────────────────────────────────────────────────
    -- "row" places children side by side; each child gets equal width.
    Rows = {"col",
-      {"row", {"Prev", press={"nav", "Hello"}}, {"Next", press={"nav", "Weighted"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Hello"}}, {"Next", press={"nav", "Weighted"}}},
       "Row layout: children side by side.",
       {"row", "Left cell", "Center cell", "Right cell"},
       {"row", "A", "B", "C", "D"},
@@ -64,7 +64,7 @@ menus = {
    -- weight= controls how much space a child gets relative to its siblings.
    -- Default weight is 1. A child with weight=2 gets twice as much space.
    Weighted = {"col",
-      {"row", {"Prev", press={"nav", "Rows"}}, {"Next", press={"nav", "Fixed"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Rows"}}, {"Next", press={"nav", "Fixed"}}},
       "weight= controls proportional space.",
       {"row", "weight 1", "weight 2 (double)", weight=2},
       {"row", "1", "3 (triple)", weight=3, "1"},
@@ -74,7 +74,7 @@ menus = {
    -- size= gives a child a fixed pixel size (height for col, width for row).
    -- Weighted children share the remaining space after fixed children.
    Fixed = {"col",
-      {"row", {"Prev", press={"nav", "Weighted"}}, {"Next", press={"nav", "Styled"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Weighted"}}, {"Next", press={"nav", "Styled"}}},
       "size= fixes a child's height (or width in row).",
       {"Little", size = 60},            -- exactly 60 px tall
       "Weighted (weight=1, gets rest)",
@@ -86,7 +86,7 @@ menus = {
    -- bg and fg change background and foreground colors.
    Styled = {"col",
       font = fonts.roboto, bg = colors.green, fg = colors.black,
-      {"row", {"Prev", press={"nav", "Fixed"}}, {"Next", press={"nav", "SubStyled"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Fixed"}}, {"Next", press={"nav", "SubStyled"}}},
       "bg= and fg= apply to the whole menu.",
       "Children inherit parent style.",
       {"row", "All children", "see green bg"},
@@ -96,7 +96,7 @@ menus = {
    -- Style attributes on a child override only that child's style.
    SubStyled = {"col",
       bg = colors.green,
-      {"row", {"Prev", press={"nav", "Styled"}}, {"Next", press={"nav", "Pad"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Styled"}}, {"Next", press={"nav", "Pad"}}},
       "Style on a child overrides just that child.",
       {"row",
          {"Blue cell", bg = colors.blue, fg = colors.white},
@@ -109,7 +109,7 @@ menus = {
    -- pad= adds space inside a container between its border and its children.
    -- pad_left/top/right/bottom override individual sides.
    Pad = {"col", pad = 10,
-      {"row", {"Prev", press={"nav", "SubStyled"}}, {"Next", press={"nav", "Margin"}}},
+      {"row", size = 60, {"Prev", press={"nav", "SubStyled"}}, {"Next", press={"nav", "Margin"}}},
       "pad= adds internal space on all sides.",
       {"row",
          {"Big left pad", pad_left = 40},
@@ -121,7 +121,7 @@ menus = {
    -- margin= adds external space outside a child, shrinking it from all sides.
    -- Unlike pad (which is internal), margin affects the child's own rect.
    Margin = {"col",
-      {"row", {"Prev", press={"nav", "Pad"}}, {"Next", press={"nav", "Borders"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Pad"}}, {"Next", press={"nav", "Borders"}}},
       "margin= shrinks a child from all sides (external space).",
       {"row",
          {"margin 0 (normal)"},
@@ -134,7 +134,7 @@ menus = {
    -- border= draws a rectangular border. width= sets thickness, color= sets color.
    -- side= restricts to one edge: "top", "bottom", "left", or "right".
    Borders = {"col",
-      {"row", {"Prev", press={"nav", "Margin"}}, {"Next", press={"nav", "Clickable"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Margin"}}, {"Next", press={"nav", "Clickable"}}},
       "border= draws a border around a cell or container.",
       {"row",
          {"Full border",   border = {width = 4, color = colors.green}},
@@ -149,7 +149,7 @@ menus = {
    -- nav is the built-in: it switches menus by name.
    -- Custom callbacks are declared by any press= you use; the app implements them.
    Clickable = {"col",
-      {"row", {"Prev", press={"nav", "Borders"}}, {"Next", press={"nav", "Focusable"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Borders"}}, {"Next", press={"nav", "Focusable"}}},
       "press= triggers a callback method on touch/click.",
       {"Zero args — fn click()",          press = {"click"}},
       {"One arg  — fn action(args)",      press = {"action", "hello"}},
@@ -161,7 +161,7 @@ menus = {
    -- Pressing a focusable cell highlights it with style.focused.
    -- focusable=false opts a cell out even if it has press=.
    Focusable = {"col",
-      {"row", {"Prev", press={"nav", "Clickable"}}, {"Next", press={"nav", "Dynamic"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Clickable"}}, {"Next", press={"nav", "Dynamic"}}},
       "Press a cell to focus it (thick border from style.focused).",
       {"Focusable — tap me!",       focusable = true},
       {"Not focusable (explicit)",  focusable = false},
@@ -173,7 +173,7 @@ menus = {
    -- update_changes(&[("label name", "value")]).
    -- The cell is left blank on initial draw; populate it on the first update.
    Dynamic = {"col",
-      {"row", {"Prev", press={"nav", "Focusable"}}, {"Next", press={"nav", "Progress"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Focusable"}}, {"Next", press={"nav", "Progress"}}},
       "lbl= cells are updated at runtime via update_changes().",
       "Static text stays fixed.",
       {lbl = "parameter One"},   -- updated by app each frame
@@ -184,7 +184,7 @@ menus = {
    -- render="progress bar" displays a lbl= cell as a horizontal bar.
    -- The value must be a float string in [0, 1] (e.g. "0.75").
    Progress = {"col",
-      {"row", {"Prev", press={"nav", "Dynamic"}}, {"Next", press={"nav", "Popup"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Dynamic"}}, {"Next", press={"nav", "Popup"}}},
       "render=\"progress bar\" draws a filled bar (value in [0,1]).",
       {lbl = "parameter One", render = "progress bar"},
       {lbl = "parameter Two", render = "progress bar"},
@@ -198,7 +198,7 @@ menus = {
       size  = {math.floor(0.5 * screen.width), math.floor(0.7 * screen.height)},
       align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       anchor = "center",
-      {"row", {"Prev", press={"nav", "Progress"}}, {"Next", press={"nav", "Complex"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Progress"}}, {"Next", press={"nav", "Complex"}}},
       "size= shrinks the menu; align= positions it.",
       "anchor= chooses which point of the",
       "menu the align coordinate refers to.",
@@ -208,7 +208,7 @@ menus = {
    -- Containers can be nested arbitrarily. A col inside a row inside a col, etc.
    -- Style inherits down the tree; overrides apply only to that subtree.
    Complex = {"col",
-      {"row", {"Prev", press={"nav", "Popup"}}, {"Next", press={"nav", "Hello"}}},
+      {"row", size = 60, {"Prev", press={"nav", "Popup"}}, {"Next", press={"nav", "Hello"}}},
       "Containers nest freely (col in row, row in col...).",
       {"row",
          {"col", "Top-left", "Bottom-left"},
