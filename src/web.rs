@@ -1,5 +1,6 @@
 use super::Backend;
 use crate::{InputEvent, Pixel};
+use std::cell::RefCell;
 
 extern "C" {
     fn imgrids_blit(ptr: *const u8, byte_len: usize, width: u32, height: u32);
@@ -9,6 +10,7 @@ extern "C" {
         out_x: *mut i32,
         out_y: *mut i32,
     ) -> i32;
+    fn emscripten_set_main_loop(func: extern "C" fn(), fps: i32, simulate_infinite_loop: i32);
     fn emscripten_sleep(ms: u32);
 }
 
@@ -16,6 +18,7 @@ pub struct WebBackend {
     pixels: Vec<Pixel>,
     width: usize,
     height: usize,
+    dirty: bool,
     events: Vec<InputEvent>,
 }
 
@@ -29,6 +32,7 @@ impl Backend for WebBackend {
 
     fn clear(&mut self, color: Pixel) {
         self.pixels.fill(color);
+        self.dirty = true;
     }
 
     fn fill_rect(
@@ -47,13 +51,17 @@ impl Backend for WebBackend {
             let start = row * self.width + x;
             self.pixels[start..start + w].fill(color);
         }
+        self.dirty = true;
     }
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
         draw_fn(&mut self.pixels, self.width);
+        self.dirty = true;
     }
 
     fn flush(&mut self) {
+        if !self.dirty { return; }
+        self.dirty = false;
         unsafe {
             imgrids_blit(
                 self.pixels.as_ptr() as *const u8,
@@ -98,6 +106,7 @@ pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
         pixels: vec![0; w * h],
         width: w,
         height: h,
+        dirty: false,
         events: Vec::new(),
     })
 }
@@ -106,12 +115,28 @@ pub fn sleep(ms: u32) {
     unsafe { emscripten_sleep(ms) };
 }
 
+thread_local! {
+    static MAIN_LOOP_CB: RefCell<Option<Box<dyn FnMut()>>> = RefCell::new(None);
+}
+
+extern "C" fn main_loop_trampoline() {
+    MAIN_LOOP_CB.with(|cb| {
+        if let Some(f) = cb.borrow_mut().as_mut() {
+            f();
+        }
+    });
+}
+
 pub fn run(
     mut backend: Box<dyn Backend>,
-    mut tick_fn: impl FnMut(&mut dyn Backend),
+    mut tick_fn: impl FnMut(&mut dyn Backend) + 'static,
 ) {
-    loop {
-        tick_fn(&mut *backend);
-        sleep(0);
-    }
+    MAIN_LOOP_CB.with(|cb| {
+        *cb.borrow_mut() = Some(Box::new(move || {
+            tick_fn(&mut *backend);
+        }));
+    });
+    // fps=30 matches the native sleep(33) rate; uses requestAnimationFrame
+    // internally — no Asyncify overhead per frame.
+    unsafe { emscripten_set_main_loop(main_loop_trampoline, 30, 1); }
 }

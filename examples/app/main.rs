@@ -20,7 +20,7 @@ impl ui::Callbacks for GuiState {
 
 fn current_values(t: f32) -> [(&'static str, String); 2] {
     [
-        ("parameter One", format!("{:.3}", t.sin())),
+        ("parameter One", format!("{:.3}", t.sin().abs())),
         ("parameter Two", format!("{:.3}", (t * 0.5).cos().abs())),
     ]
 }

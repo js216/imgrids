@@ -147,6 +147,8 @@ local function merge_style(base, node)
 	if type(node) ~= "table" then
 		return s
 	end
+	-- Style properties live under node.style if present; otherwise flat on node.
+	node = node.style or node
 	if node.font then
 		s.font = node.font
 	end
@@ -276,8 +278,9 @@ local function get_press(node)
 	return p
 end
 
-local function layout_node(node, x, y, w, h, parent_style, ops)
-	local s = merge_style(parent_style, node)
+local function layout_node(node, x, y, w, h, ops)
+	-- Style never propagates from parent to child; each node starts from default_style.
+	local s = merge_style(default_style, node)
 
 	-- Apply margin
 	local mx = s.margin
@@ -354,9 +357,9 @@ local function layout_node(node, x, y, w, h, parent_style, ops)
 				end
 			end
 			if dir == "col" then
-				layout_node(ch, ix, pos, iw, sz, s, ops)
+				layout_node(ch, ix, pos, iw, sz, ops)
 			else
-				layout_node(ch, pos, iy, sz, ih, s, ops)
+				layout_node(ch, pos, iy, sz, ih, ops)
 			end
 			pos = pos + sz
 		end
@@ -562,7 +565,7 @@ for _, name in ipairs(menu_names) do
 	end
 
 	local ops = {}
-	layout_node(m, mx, my, mw, mh, default_style, ops)
+	layout_node(m, mx, my, mw, mh, ops)
 	menu_ops[name] = ops
 end
 
@@ -685,10 +688,29 @@ end
 e("}")
 e("")
 
--- CURRENT_MENU and FOCUSED statics
+-- CURRENT_MENU, FOCUSED, and LAST_DRAWN_FOCUS statics
 e("static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);")
 e("static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);")
+e("static LAST_DRAWN_FOCUS: Mutex<Option<usize>> = Mutex::new(Some(usize::MAX));")
 e("")
+
+-- Collect all progress bar ops globally and assign indices
+local all_prog_ops = {}
+for _, name in ipairs(menu_names) do
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "progress" then
+			all_prog_ops[#all_prog_ops+1] = op
+			op.prog_idx = #all_prog_ops
+		end
+	end
+end
+if #all_prog_ops > 0 then
+	e("use std::sync::atomic::{AtomicUsize, Ordering};")
+	for i = 1, #all_prog_ops do
+		e("static PROG_%d_PREV: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
+	end
+	e("")
+end
 
 -- Collect callbacks: map fn_name -> max_nargs
 local callbacks = {}
@@ -754,6 +776,10 @@ e("    if *current != Some(menu) {")
 e("        *current = Some(menu);")
 e("        drop(current);")
 e("        *FOCUSED.lock().unwrap() = None;")
+e("        *LAST_DRAWN_FOCUS.lock().unwrap() = None;")
+for i = 1, #all_prog_ops do
+	e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
+end
 e("        match menu {")
 for _, name in ipairs(menu_names) do
 	e("            Menu::%s => draw_%s(backend),", name, name:lower())
@@ -981,47 +1007,53 @@ for _, name in ipairs(menu_names) do
 	e("fn update_changes_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	if #dyn_ops > 0 then
-		e("    backend.render(&mut |fb, stride| {")
-		e("        for &(name, val) in changes {")
+		-- Guard render() behind a check for matching label names
+		local conds = {}
+		for _, op in ipairs(dyn_ops) do
+			conds[#conds+1] = ("n == %q"):format(op.lbl)
+		end
+		e("    if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
+		e("        backend.render(&mut |fb, stride| {")
+		e("            for &(name, val) in changes {")
 		if #dyn_ops == 1 then
 			local op = dyn_ops[1]
-			e("            if name == %q {", op.lbl)
-			e("                %s().blit(fb, stride, %d, %d,", op.atlas.fn_name, op.text_x, op.text_y)
-			e('                    &format!("{:<%d}", val));', op.pad_chars)
-			e("            }")
+			e("                if name == %q {", op.lbl)
+			e("                    %s().blit(fb, stride, %d, %d,", op.atlas.fn_name, op.text_x, op.text_y)
+			e('                        &format!("{:<%d}", val));', op.pad_chars)
+			e("                }")
 		else
-			e("            match name {")
+			e("                match name {")
 			for _, op in ipairs(dyn_ops) do
-				e("                %q => %s().blit(fb, stride, %d, %d,", op.lbl, op.atlas.fn_name, op.text_x, op.text_y)
-				e('                    &format!("{:<%d}", val)),', op.pad_chars)
+				e("                    %q => %s().blit(fb, stride, %d, %d,", op.lbl, op.atlas.fn_name, op.text_x, op.text_y)
+				e('                        &format!("{:<%d}", val)),', op.pad_chars)
 			end
-			e("                _ => {}")
-			e("            }")
+			e("                    _ => {}")
+				e("                }")
 		end
-		e("        }")
-		e("    });")
+		e("            }")
+		e("        });")
+		e("    }")
 	end
 
 	if #prog_ops > 0 then
 		e("    for &(name, val) in changes {")
 		for _, op in ipairs(prog_ops) do
+			local x_prev = op.px > 0 and ("%d + prev"):format(op.px) or "prev"
+			local x_filled = op.px > 0 and ("%d + filled"):format(op.px) or "filled"
 			e("        if name == %q {", op.lbl)
 			e("            if let Ok(v) = val.parse::<f32>() {")
 			e("                let v = v.clamp(0.0, 1.0);")
 			e("                let filled = (%d.0_f32 * v) as usize;", op.pw)
-			e("                if filled > 0 {")
-			e("                    backend.fill_rect(%d, %d, filled, %d, %s);", op.px, op.py, op.ph, rgb_lit(op.fg))
-			e("                }")
-			e("                if filled < %d {", op.pw)
-			local x_filled = op.px > 0 and ("%d + filled"):format(op.px) or "filled"
-			e(
-				"                    backend.fill_rect(%s, %d, %d - filled, %d, %s);",
-				x_filled,
-				op.py,
-				op.pw,
-				op.ph,
-				rgb_lit(op.bg)
-			)
+			e("                let prev = PROG_%d_PREV.swap(filled, Ordering::Relaxed);", op.prog_idx)
+			e("                if filled != prev {")
+			e("                    if prev == usize::MAX {")
+			e("                        if filled > 0 { backend.fill_rect(%d, %d, filled, %d, %s); }", op.px, op.py, op.ph, rgb_lit(op.fg))
+			e("                        if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
+			e("                    } else if filled > prev {")
+			e("                        backend.fill_rect(%s, %d, filled - prev, %d, %s);", x_prev, op.py, op.ph, rgb_lit(op.fg))
+			e("                    } else {")
+			e("                        backend.fill_rect(%s, %d, prev - filled, %d, %s);", x_filled, op.py, op.ph, rgb_lit(op.bg))
+			e("                    }")
 			e("                }")
 			e("            }")
 			e("        }")
@@ -1030,7 +1062,15 @@ for _, name in ipairs(menu_names) do
 	end
 
 	if #fops > 0 then
-		e("    draw_focus_%s(backend, *FOCUSED.lock().unwrap());", name:lower())
+		e("    {")
+		e("        let focused = *FOCUSED.lock().unwrap();")
+		e("        let mut last = LAST_DRAWN_FOCUS.lock().unwrap();")
+		e("        if *last != focused {")
+		e("            *last = focused;")
+		e("            drop(last);")
+		e("            draw_focus_%s(backend, focused);", name:lower())
+		e("        }")
+		e("    }")
 	end
 
 	e("}")

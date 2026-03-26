@@ -10,6 +10,9 @@ pub struct Sdl2Backend {
     pub event_pump: EventPump,
     pub width: usize,
     pub height: usize,
+    // Shadow pixel buffer: fill_rect/render write here; flush uploads once.
+    pixels: Vec<Pixel>,
+    dirty: bool,
     // Owns the creator so that the texture lifetime is self-contained.
     _creator: Box<TextureCreator<WindowContext>>,
     events: Vec<InputEvent>,
@@ -41,6 +44,8 @@ impl Sdl2Backend {
             event_pump,
             width: width as usize,
             height: height as usize,
+            pixels: vec![0; (width * height) as usize],
+            dirty: false,
             _creator: creator,
             events: Vec::new(),
         })
@@ -56,7 +61,8 @@ impl Backend for Sdl2Backend {
     }
 
     fn clear(&mut self, color: Pixel) {
-        self.render(&mut |pixels, _stride| pixels.fill(color));
+        self.pixels.fill(color);
+        self.dirty = true;
     }
 
     fn fill_rect(
@@ -71,30 +77,40 @@ impl Backend for Sdl2Backend {
         let y_end = (y + h).min(self.height);
         if x >= x_end || y >= y_end { return; }
         let w = x_end - x;
-        self.render(&mut |pixels, stride| {
-            for row in y..y_end {
-                let start = row * stride + x;
-                pixels[start..start + w].fill(color);
-            }
-        });
+        for row in y..y_end {
+            let start = row * self.width + x;
+            self.pixels[start..start + w].fill(color);
+        }
+        self.dirty = true;
     }
 
     fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        self.texture
-            .with_lock(None, |buffer: &mut [u8], stride: usize| {
-                let pixel_stride = stride / 2;
-                let pixels = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        buffer.as_mut_ptr() as *mut Pixel,
-                        buffer.len() / 2,
-                    )
-                };
-                draw_fn(pixels, pixel_stride);
-            })
-            .expect("texture lock failed");
+        let width = self.width;
+        draw_fn(&mut self.pixels, width);
+        self.dirty = true;
     }
 
     fn flush(&mut self) {
+        if !self.dirty { return; }
+        self.dirty = false;
+        let pixels = &self.pixels;
+        let width = self.width;
+        self.texture
+            .with_lock(None, |buffer: &mut [u8], stride: usize| {
+                let row_bytes = width * 2;
+                let src = unsafe {
+                    std::slice::from_raw_parts(pixels.as_ptr() as *const u8, pixels.len() * 2)
+                };
+                if stride == row_bytes {
+                    buffer.copy_from_slice(src);
+                } else {
+                    for row in 0..buffer.len() / stride {
+                        buffer[row * stride..row * stride + row_bytes]
+                            .copy_from_slice(&src[row * row_bytes..(row + 1) * row_bytes]);
+                    }
+                }
+            })
+            .expect("texture lock failed");
         self.canvas
             .copy(&self.texture, None, None)
             .expect("canvas copy failed");
