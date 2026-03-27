@@ -1,98 +1,156 @@
 use crate::{Pixel, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
+use std::collections::HashMap;
 use std::io;
 
 // --- Atlas (baked pixels for one size+colour combination) --------------------
 
 pub struct TtfAtlas {
     cell_h: usize,
-    /// Per-glyph advance width in pixels; 0 = no glyph
-    adv: [usize; 128],
-    /// Flat buffer of all glyph bitmaps concatenated (variable width x cell_h)
+    /// Fast-path advance width for ASCII 0-127; 0 = no glyph
+    ascii_adv: [usize; 128],
+    /// Fast-path offset into buf for ASCII 0-127
+    ascii_off: [usize; 128],
+    /// Extended glyphs (non-ASCII): code point → (offset, advance)
+    ext: HashMap<u32, (usize, usize)>,
+    /// Flat buffer of all glyph bitmaps concatenated
     buf: Vec<Pixel>,
-    /// Index into buf for each glyph
-    offsets: [usize; 128],
 }
 
 impl TtfAtlas {
+    /// Create an atlas from one or more font files (fallback chain).
+    /// Each entry is (path, size). Glyphs are resolved from the first
+    /// font that contains them.
     pub fn new(
+        fonts: &[(&str, usize)],
+        extra: &[u32],
+        fg: Pixel,
+        bg: Pixel,
+    ) -> io::Result<Self> {
+        if fonts.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "no fonts"));
+        }
+        let cell_h = fonts[0].1;
+        let mut loaded = Vec::new();
+        for &(path, _) in fonts {
+            let data = std::fs::read(path)
+                .map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
+            let font = FontVec::try_from_vec(data).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("{path}: {e}"))
+            })?;
+            loaded.push(font);
+        }
+        Ok(Self::bake(&loaded, extra, cell_h, fg, bg))
+    }
+
+    /// Legacy single-font constructor.
+    pub fn new_single(
         path: &str,
         cell_h: usize,
         fg: Pixel,
         bg: Pixel,
     ) -> io::Result<Self> {
-        let data = std::fs::read(path)
-            .map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
-        let font = FontVec::try_from_vec(data).map_err(|e| {
-            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-        })?;
-        Ok(Self::bake(&font, cell_h, fg, bg))
+        Self::new(&[(path, cell_h)], &[], fg, bg)
     }
 
-    fn bake(font: &FontVec, cell_h: usize, fg: Pixel, bg: Pixel) -> Self {
-        let scale = {
-            let raw = PxScale::from(cell_h as f32);
-            let sf = font.as_scaled(raw);
-            let natural_h = sf.ascent() - sf.descent();
-            PxScale::from((cell_h as f32 / natural_h) * cell_h as f32)
-        };
-        let sf = font.as_scaled(scale);
-        let baseline = sf.ascent();
-
-        let mut adv = [0usize; 128];
-        let mut offsets = [0usize; 128];
-        for code in 0u8..128 {
-            adv[code as usize] =
-                sf.h_advance(font.glyph_id(code as char)).ceil() as usize;
-        }
-
-        let total: usize = adv.iter().map(|&w| w * cell_h).sum();
-        let mut buf = vec![bg; total];
-        let mut ptr = 0usize;
-
+    fn bake(fonts: &[FontVec], extra: &[u32], cell_h: usize, fg: Pixel, bg: Pixel) -> Self {
         let (fg_rgb, bg_rgb) = channels(fg, bg);
 
-        for code in 0u8..128 {
-            let gw = adv[code as usize];
-            offsets[code as usize] = ptr;
-            if gw == 0 {
-                continue;
+        // Collect all code points to render: ASCII + extra + scan fonts for non-ASCII
+        let mut codepoints: Vec<u32> = (0u32..128).collect();
+        for &cp in extra {
+            if !codepoints.contains(&cp) {
+                codepoints.push(cp);
+            }
+        }
+        for font in fonts {
+            // Scan Private Use Area (FontAwesome range) and other useful ranges
+            for cp in 0xF000u32..0xFA00 {
+                if let Some(c) = char::from_u32(cp) {
+                    let id = font.glyph_id(c);
+                    if id.0 != 0 && !codepoints.contains(&cp) {
+                        codepoints.push(cp);
+                    }
+                }
+            }
+        }
+
+        // Pre-compute advances: for each code point, find the first font with a glyph
+        struct GlyphInfo {
+            cp: u32,
+            font_idx: usize,
+            adv: usize,
+        }
+        let mut glyphs: Vec<GlyphInfo> = Vec::new();
+        for &cp in &codepoints {
+            if let Some(c) = char::from_u32(cp) {
+                for (fi, font) in fonts.iter().enumerate() {
+                    let scale = compute_scale(font, cell_h);
+                    let sf = font.as_scaled(scale);
+                    let id = font.glyph_id(c);
+                    // Skip .notdef (id 0) — means the font doesn't have this character
+                    if id.0 == 0 { continue; }
+                    let a = sf.h_advance(id).ceil() as usize;
+                    if a > 0 {
+                        glyphs.push(GlyphInfo { cp, font_idx: fi, adv: a });
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Render all glyphs into a flat buffer
+        let total: usize = glyphs.iter().map(|g| g.adv * cell_h).sum();
+        let mut buf = vec![bg; total];
+        let mut ascii_adv = [0usize; 128];
+        let mut ascii_off = [0usize; 128];
+        let mut ext: HashMap<u32, (usize, usize)> = HashMap::new();
+        let mut ptr = 0usize;
+
+        for g in &glyphs {
+            let font = &fonts[g.font_idx];
+            let scale = compute_scale(font, cell_h);
+            let sf = font.as_scaled(scale);
+            let c = char::from_u32(g.cp).unwrap();
+            let gw = g.adv;
+
+            if g.cp < 128 {
+                ascii_adv[g.cp as usize] = gw;
+                ascii_off[g.cp as usize] = ptr;
+            } else {
+                ext.insert(g.cp, (ptr, gw));
             }
 
-            let id = font.glyph_id(code as char);
+            let id = font.glyph_id(c);
             let lsb = sf.h_side_bearing(id);
             let glyph = id.with_scale_and_position(
                 scale,
-                ab_glyph::point(-lsb, baseline),
+                ab_glyph::point(-lsb, sf.ascent()),
             );
 
             let n = gw * cell_h;
             let mut alpha = vec![0u8; n];
-
             if let Some(outlined) = font.outline_glyph(glyph) {
                 rasterise_alpha(&outlined, &mut alpha, gw, cell_h);
             }
-
             blend_into(&mut buf[ptr..ptr + n], &alpha, fg_rgb, bg_rgb);
             ptr += n;
         }
 
-        TtfAtlas {
-            cell_h,
-            adv,
-            buf,
-            offsets,
-        }
+        TtfAtlas { cell_h, ascii_adv, ascii_off, ext, buf }
     }
 
     #[inline]
-    fn glyph(&self, code: usize) -> Option<(&[Pixel], usize)> {
-        let code = code & 0x7F;
-        let gw = self.adv[code];
-        if gw == 0 {
-            return None;
-        }
-        let off = self.offsets[code];
+    fn glyph_by_char(&self, c: char) -> Option<(&[Pixel], usize)> {
+        let cp = c as u32;
+        let (off, gw) = if cp < 128 {
+            let gw = self.ascii_adv[cp as usize];
+            if gw == 0 { return None; }
+            (self.ascii_off[cp as usize], gw)
+        } else {
+            let &(off, gw) = self.ext.get(&cp)?;
+            (off, gw)
+        };
         Some((&self.buf[off..off + gw * self.cell_h], gw))
     }
 }
@@ -101,8 +159,8 @@ impl Renderer for TtfAtlas {
     fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let ch = self.cell_h;
         let mut cx = x;
-        for byte in text.bytes() {
-            if let Some((src, gw)) = self.glyph(byte as usize) {
+        for c in text.chars() {
+            if let Some((src, gw)) = self.glyph_by_char(c) {
                 for gy in 0..ch {
                     let dst = (y + gy) * stride + cx;
                     fb[dst..dst + gw]
@@ -118,18 +176,26 @@ impl Renderer for TtfAtlas {
         self.cell_h
     }
     fn char_width(&self, c: char) -> usize {
-        if c.is_ascii() {
-            self.adv[c as usize]
+        let cp = c as u32;
+        if cp < 128 {
+            self.ascii_adv[cp as usize]
         } else {
-            0
+            self.ext.get(&cp).map(|&(_, gw)| gw).unwrap_or(0)
         }
     }
     fn text_width(&self, text: &str) -> usize {
-        text.bytes().map(|b| self.adv[b as usize & 0x7F]).sum()
+        text.chars().map(|c| self.char_width(c)).sum()
     }
 }
 
 // --- Helpers -----------------------------------------------------------------
+
+fn compute_scale(font: &FontVec, cell_h: usize) -> PxScale {
+    let raw = PxScale::from(cell_h as f32);
+    let sf = font.as_scaled(raw);
+    let natural_h = sf.ascent() - sf.descent();
+    PxScale::from((cell_h as f32 / natural_h) * cell_h as f32)
+}
 
 #[cfg(feature = "bpp16")]
 fn to_rgb888(p: Pixel) -> (u32, u32, u32) {

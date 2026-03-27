@@ -65,7 +65,13 @@ local function rgb_lit(c)
 	return ("rgb!(%d, %d, %d)"):format(c[1], c[2], c[3])
 end
 
+-- Font can be {"path", size} (single) or {{"path1", size}, {"path2", size}} (fallback chain)
+local function is_font_chain(font)
+	return type(font[1]) == "table"
+end
+
 local function is_raster(font)
+	if is_font_chain(font) then return false end
 	return type(font[1]) == "string" and font[1]:sub(1, 7) == "raster:"
 end
 
@@ -98,14 +104,61 @@ local function resolve_raster_font(font)
 	return name, glyph_w, glyph_h
 end
 
+-- For font chains, use the first font's size for estimates
+local function font_size(font)
+	if is_font_chain(font) then return font[1][2] end
+	return font[2]
+end
+
 local function char_width_est(font)
 	if is_raster(font) then
 		local _, glyph_w, _ = resolve_raster_font(font)
 		return glyph_w
 	else
-		-- TTF: ~0.55 * cell_h (good approximation for RobotoMono; conservative for proportional)
-		return math.max(1, math.floor(font[2] * 0.55))
+		return math.max(1, math.floor(font_size(font) * 0.55))
 	end
+end
+
+-- Count UTF-8 characters (not bytes)
+local function utf8_charcount(s)
+	local count = 0
+	local i = 1
+	while i <= #s do
+		local b = s:byte(i)
+		if b < 0x80 then i = i + 1
+		elseif b < 0xE0 then i = i + 2
+		elseif b < 0xF0 then i = i + 3
+		else i = i + 4
+		end
+		count = count + 1
+	end
+	return count
+end
+
+-- Estimate pixel width of a UTF-8 string
+local function text_width_est(s, font)
+	local cw = char_width_est(font)
+	local fs = font_size(font)
+	local icon_w = math.max(1, math.floor(fs * 0.9))  -- FA icons are roughly square
+	local w = 0
+	local i = 1
+	while i <= #s do
+		local b = s:byte(i)
+		if b < 0x80 then
+			w = w + cw
+			i = i + 1
+		elseif b < 0xE0 then
+			w = w + icon_w
+			i = i + 2
+		elseif b < 0xF0 then
+			w = w + icon_w
+			i = i + 3
+		else
+			w = w + icon_w
+			i = i + 4
+		end
+	end
+	return w
 end
 
 local function cell_height_est(font)
@@ -113,7 +166,7 @@ local function cell_height_est(font)
 		local _, _, glyph_h = resolve_raster_font(font)
 		return glyph_h
 	else
-		return font[2]
+		return font_size(font)
 	end
 end
 
@@ -330,6 +383,11 @@ local function atlas_key(font, fg, bg)
 		local name, gw, gh = resolve_raster_font(font)
 		return ("R:%s:%d:%d:%d:%d:%d:%d:%d:%d"):format(name, gw, gh, fg[1], fg[2], fg[3], bg[1], bg[2], bg[3])
 	else
+		if is_font_chain(font) then
+			local parts = {}
+			for _, f in ipairs(font) do parts[#parts+1] = f[1] .. ":" .. f[2] end
+			return ("T:%s:%d:%d:%d:%d:%d:%d"):format(table.concat(parts, "+"), fg[1], fg[2], fg[3], bg[1], bg[2], bg[3])
+		end
 		return ("T:%s:%d:%d:%d:%d:%d:%d:%d"):format(font[1], font[2], fg[1], fg[2], fg[3], bg[1], bg[2], bg[3])
 	end
 end
@@ -341,19 +399,28 @@ local function get_atlas(font, fg, bg)
 		return atlas_map[k]
 	end
 	-- Check font file exists (once per path)
-	if not is_raster(font) and not checked_fonts[font[1]] then
-		checked_fonts[font[1]] = true
-		local f = io.open(font[1], "r")
-		if f then
-			f:close()
-		else
-			warn("font file not found: %s", font[1])
+	if not is_raster(font) then
+		local paths = is_font_chain(font)
+			and font  -- {{path,sz}, {path,sz}}
+			or {font}  -- wrap single {"path",sz} into a list
+		for _, fp in ipairs(paths) do
+			local path = fp[1]
+			if not checked_fonts[path] then
+				checked_fonts[path] = true
+				local f = io.open(path, "r")
+				if f then f:close()
+				else warn("font file not found: %s", path)
+				end
+			end
 		end
 	end
 	local idx = #atlases + 1
+	-- Collect extra code points from font spec
+	local extra = font.extra or {}
 	local rec = {
 		key = k,
 		font = font,
+		extra = extra,
 		fg = { fg[1], fg[2], fg[3] },
 		bg = { bg[1], bg[2], bg[3] },
 		idx = idx,
@@ -583,7 +650,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			is_focusable = (press ~= nil)
 		end
 
-		local atlas = render ~= "progress bar" and get_atlas(s.font, s.fg, s.bg) or nil
+		local needs_atlas = (text or lbl) and render ~= "progress bar"
+		local atlas = needs_atlas and get_atlas(s.font, s.fg, s.bg) or nil
 		local ch_px = cell_height_est(s.font)
 		local cw_px = char_width_est(s.font)
 		-- Inset by border + padding so text is drawn inside both
@@ -610,10 +678,10 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		local line_xs = {}
 		for i, line in ipairs(lines) do
 			if align == "center" then
-				local tw = #line * cw_px
+				local tw = text_width_est(line, s.font)
 				line_xs[i] = text_x + math.floor((inner_w - tw) / 2)
 			elseif align == "right" then
-				local tw = #line * cw_px
+				local tw = text_width_est(line, s.font)
 				line_xs[i] = text_x + (inner_w - tw)
 			else
 				line_xs[i] = text_x
@@ -637,10 +705,10 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			local f_line_xs = {}
 			for i, line in ipairs(lines) do
 				if align == "center" then
-					local tw = #line * fcw_px
+					local tw = text_width_est(line, fs.font)
 					f_line_xs[i] = f_text_x + math.floor((f_inner_w - tw) / 2)
 				elseif align == "right" then
-					local tw = #line * fcw_px
+					local tw = text_width_est(line, fs.font)
 					f_line_xs[i] = f_text_x + (f_inner_w - tw)
 				else
 					f_line_xs[i] = f_text_x
@@ -649,6 +717,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			foc = {
 				atlas = get_atlas(fs.font, fs.fg, fs.bg),
 				text_x = f_text_x,
+				inner_w = f_inner_w,
+				align = align,
 				line_xs = f_line_xs,
 				text_y = (y + fby) + math.floor(((h - fbh) - fblock_h) / 2),
 				line_step = fch_px + line_gap,
@@ -720,6 +790,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				h = h,
 				text_x = text_x,
 				text_y = text_y,
+				inner_w = inner_w,
+				align = align,
 				line_xs = line_xs,
 				lines = lines,
 				line_step = line_step,
@@ -891,15 +963,32 @@ for _, a in ipairs(atlases) do
 	else
 		e("static %s: OnceLock<TtfAtlas> = OnceLock::new();", a.varname)
 		e("fn %s() -> &'static TtfAtlas {", a.fn_name)
-		e(
-			"    %s.get_or_init(|| TtfAtlas::new(%q, %d, %s, %s)",
-			a.varname,
-			a.font[1],
-			a.font[2],
-			rgb_lit(a.fg),
-			rgb_lit(a.bg)
-		)
-		e("        .expect(%q))", a.font[1])
+		-- Build extra codepoints array
+		local extra_str = "&[]"
+		if #a.extra > 0 then
+			local parts = {}
+			for _, cp in ipairs(a.extra) do
+				parts[#parts+1] = ("0x%04X"):format(cp)
+			end
+			extra_str = ("&[%s]"):format(table.concat(parts, ", "))
+		end
+		if is_font_chain(a.font) then
+			-- Font fallback chain: {{"path1", size}, {"path2", size}, ...}
+			local parts = {}
+			for _, f in ipairs(a.font) do
+				parts[#parts+1] = ("(%q, %d)"):format(f[1], f[2])
+			end
+			e("    %s.get_or_init(|| TtfAtlas::new(&[%s], %s, %s, %s)",
+				a.varname, table.concat(parts, ", "),
+				extra_str, rgb_lit(a.fg), rgb_lit(a.bg))
+			e("        .expect(%q))", a.font[1][1])
+		else
+			-- Single font: {"path", size}
+			e("    %s.get_or_init(|| TtfAtlas::new(&[(%q, %d)], %s, %s, %s)",
+				a.varname, a.font[1], a.font[2],
+				extra_str, rgb_lit(a.fg), rgb_lit(a.bg))
+			e("        .expect(%q))", a.font[1])
+		end
 		e("}")
 	end
 	e("")
@@ -1049,6 +1138,21 @@ e("    backend.flush();")
 e("}")
 e("")
 
+-- Helper: emit a static text blit with pixel-perfect alignment
+local function emit_static_blit(indent, atlas_fn, align, text_x, inner_w, y, line)
+	if align == "center" then
+		e("%s{ let tw = %s().text_width(%q);", indent, atlas_fn, line)
+		e("%s  backend.blit(%s(), %d + (%d - tw) / 2, %d, %q); }",
+			indent, atlas_fn, text_x, inner_w, y, line)
+	elseif align == "right" then
+		e("%s{ let tw = %s().text_width(%q);", indent, atlas_fn, line)
+		e("%s  backend.blit(%s(), %d + %d - tw, %d, %q); }",
+			indent, atlas_fn, text_x, inner_w, y, line)
+	else
+		e("%sbackend.blit(%s(), %d, %d, %q);", indent, atlas_fn, text_x, y, line)
+	end
+end
+
 -- draw_<menu>() per-menu functions
 for _, name in ipairs(menu_names) do
 	e("fn draw_%s(backend: &mut dyn Backend) {", name:lower())
@@ -1057,7 +1161,9 @@ for _, name in ipairs(menu_names) do
 		if op.kind == "static" then
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			for i, line in ipairs(op.lines) do
-				e("    backend.blit(%s(), %d, %d, %q);", op.atlas.fn_name, op.line_xs[i], op.text_y + (i - 1) * op.line_step, line)
+				local y = op.text_y + (i - 1) * op.line_step
+				emit_static_blit("    ", op.atlas.fn_name, op.align,
+					op.text_x, op.inner_w, y, line)
 			end
 		elseif op.kind == "dynamic" or op.kind == "progress" then
 			local bg = op.atlas and op.atlas.bg or op.bg
@@ -1170,10 +1276,9 @@ for _, name in ipairs(menu_names) do
 			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
-					local fx = op.foc.line_xs[i] or op.foc.text_x
-					e("        backend.blit(%s(), %d, %d, %q);",
-						op.foc.atlas.fn_name, fx,
-						op.foc.text_y + (i - 1) * op.foc.line_step, line)
+					local y = op.foc.text_y + (i - 1) * op.foc.line_step
+					emit_static_blit("        ", op.foc.atlas.fn_name, op.foc.align,
+						op.foc.text_x, op.foc.inner_w, y, line)
 				end
 			end
 			emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
@@ -1181,8 +1286,9 @@ for _, name in ipairs(menu_names) do
 			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
-					local lx = op.line_xs[i] or op.text_x
-					e("        backend.blit(%s(), %d, %d, %q);", op.atlas.fn_name, lx, op.text_y + (i - 1) * op.line_step, line)
+					local y = op.text_y + (i - 1) * op.line_step
+					emit_static_blit("        ", op.atlas.fn_name, op.align,
+						op.text_x, op.inner_w, y, line)
 				end
 			end
 			emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)

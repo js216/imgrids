@@ -10,7 +10,6 @@ impl ui::Callbacks for GuiState {
     fn quit(&mut self) { self.quit = true; }
     fn nav(&mut self, args: &[&str]) {
         if let Some(m) = ui::to_menu(args.first().copied().unwrap_or("")) {
-            println!("{}", args[0]);
             self.menu = m;
         }
     }

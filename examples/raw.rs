@@ -11,7 +11,7 @@ fn main() {
     let mut backend = imgrids::init(800, 480);
 
     let font = RasterAtlas::new(&FONT, 16, 32, rgb!(WHITE), rgb!(BLACK));
-    let ttf = TtfAtlas::new("fonts/MyriadPro-Regular.ttf", 32, rgb!(WHITE), rgb!(BLACK))
+    let ttf = TtfAtlas::new(&[("fonts/MyriadPro-Regular.ttf", 32)], &[], rgb!(WHITE), rgb!(BLACK))
         .expect("MyriadPro-Regular.ttf");
 
     let mut x0 = 0;
