@@ -2,7 +2,7 @@
 // Re-run the transpiler to update:
 //   lua scripts/layout.lua < examples/ui.lua > examples/app/ui.rs
 // transpiler: 84c0ac6ba7fa9cc1b52ee3a07934be16f035593d7af228edf9d3973c0f41c383
-// input:      000185bafc57b44d364b010fc7a2d9b44953eb3d1f66321e81c9937d82f4372f
+// input:      ab5e14cf1d14c181e43196918ed7729e3d3d9c273f30741a246069c085145b2f
 
 use imgrids::{rgb, Backend, InputEvent, Renderer};
 use imgrids::ttf::TtfAtlas;
@@ -140,12 +140,10 @@ pub enum Menu {
     DynAlign,
     DynUpdate,
     Dynamic,
-    ExtraChars,
     Fixed,
     FlushCells,
     FocusDisable,
     Focusable,
-    FontChainExtra,
     FontIcons,
     Hello,
     LeafStyle,
@@ -196,12 +194,10 @@ pub fn to_menu(name: &str) -> Option<Menu> {
         "DynAlign" => Some(Menu::DynAlign),
         "DynUpdate" => Some(Menu::DynUpdate),
         "Dynamic" => Some(Menu::Dynamic),
-        "ExtraChars" => Some(Menu::ExtraChars),
         "Fixed" => Some(Menu::Fixed),
         "FlushCells" => Some(Menu::FlushCells),
         "FocusDisable" => Some(Menu::FocusDisable),
         "Focusable" => Some(Menu::Focusable),
-        "FontChainExtra" => Some(Menu::FontChainExtra),
         "FontIcons" => Some(Menu::FontIcons),
         "Hello" => Some(Menu::Hello),
         "LeafStyle" => Some(Menu::LeafStyle),
@@ -233,12 +229,10 @@ pub fn update_events<C: Callbacks>(events: &[InputEvent], state: &mut C) {
         Some(Menu::DynAlign) => update_events_dynalign(events, state),
         Some(Menu::DynUpdate) => update_events_dynupdate(events, state),
         Some(Menu::Dynamic) => update_events_dynamic(events, state),
-        Some(Menu::ExtraChars) => update_events_extrachars(events, state),
         Some(Menu::Fixed) => update_events_fixed(events, state),
         Some(Menu::FlushCells) => update_events_flushcells(events, state),
         Some(Menu::FocusDisable) => update_events_focusdisable(events, state),
         Some(Menu::Focusable) => update_events_focusable(events, state),
-        Some(Menu::FontChainExtra) => update_events_fontchainextra(events, state),
         Some(Menu::FontIcons) => update_events_fonticons(events, state),
         Some(Menu::Hello) => update_events_hello(events, state),
         Some(Menu::LeafStyle) => update_events_leafstyle(events, state),
@@ -284,12 +278,10 @@ pub fn update_menu(backend: &mut dyn Backend, menu: Menu) {
             Menu::DynAlign => draw_dynalign(backend),
             Menu::DynUpdate => draw_dynupdate(backend),
             Menu::Dynamic => draw_dynamic(backend),
-            Menu::ExtraChars => draw_extrachars(backend),
             Menu::Fixed => draw_fixed(backend),
             Menu::FlushCells => draw_flushcells(backend),
             Menu::FocusDisable => draw_focusdisable(backend),
             Menu::Focusable => draw_focusable(backend),
-            Menu::FontChainExtra => draw_fontchainextra(backend),
             Menu::FontIcons => draw_fonticons(backend),
             Menu::Hello => draw_hello(backend),
             Menu::LeafStyle => draw_leafstyle(backend),
@@ -322,12 +314,10 @@ pub fn update_params(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
         Some(Menu::DynAlign) => update_params_dynalign(backend, changes),
         Some(Menu::DynUpdate) => update_params_dynupdate(backend, changes),
         Some(Menu::Dynamic) => update_params_dynamic(backend, changes),
-        Some(Menu::ExtraChars) => update_params_extrachars(backend, changes),
         Some(Menu::Fixed) => update_params_fixed(backend, changes),
         Some(Menu::FlushCells) => update_params_flushcells(backend, changes),
         Some(Menu::FocusDisable) => update_params_focusdisable(backend, changes),
         Some(Menu::Focusable) => update_params_focusable(backend, changes),
-        Some(Menu::FontChainExtra) => update_params_fontchainextra(backend, changes),
         Some(Menu::FontIcons) => update_params_fonticons(backend, changes),
         Some(Menu::Hello) => update_params_hello(backend, changes),
         Some(Menu::LeafStyle) => update_params_leafstyle(backend, changes),
@@ -346,7 +336,7 @@ pub fn update_params(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
 fn draw_alignstyle(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[22/28] Align in Style Tables");
+    backend.blit(atlas_1(), 10, 10, "[22/26] Align in Style Tables");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "align works as flat prop, inside style=,");
     backend.blit(atlas_2(), 10, 66, "and via leaf_style= on containers.");
@@ -395,7 +385,7 @@ fn draw_alignstyle(backend: &mut dyn Backend) {
 fn draw_alignment(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[21/28] Text Alignment");
+    backend.blit(atlas_1(), 10, 10, "[21/26] Text Alignment");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "align= positions text within its cell.");
     backend.blit(atlas_2(), 10, 66, "left (default), center, right.");
@@ -436,7 +426,7 @@ fn draw_alignment(backend: &mut dyn Backend) {
 fn draw_borders(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[12/28] Borders");
+    backend.blit(atlas_1(), 10, 10, "[12/26] Borders");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "border= draws a border.");
     backend.blit(atlas_2(), 10, 66, "side= restricts to one edge.");
@@ -492,7 +482,7 @@ fn draw_borders(backend: &mut dyn Backend) {
 fn draw_cellstyle(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[6/28] Cell Styling");
+    backend.blit(atlas_1(), 10, 10, "[6/26] Cell Styling");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "Each cell carries a style= table.");
     backend.blit(atlas_2(), 10, 66, "Reuse named tables to share style.");
@@ -537,7 +527,7 @@ fn draw_cellstyle(backend: &mut dyn Backend) {
 fn draw_clickable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[14/28] Press Callbacks");
+    backend.blit(atlas_1(), 10, 10, "[14/26] Press Callbacks");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "press={fn, args...} triggers");
     backend.blit(atlas_2(), 10, 66, "a Callbacks method on press.");
@@ -576,7 +566,7 @@ fn draw_clickable(backend: &mut dyn Backend) {
 fn draw_cols(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[3/28] Col + Row Nesting");
+    backend.blit(atlas_1(), 10, 10, "[3/26] Col + Row Nesting");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "col inside a row:");
     backend.blit(atlas_2(), 10, 66, "each column stacks its own children.");
@@ -651,7 +641,7 @@ fn draw_cols(backend: &mut dyn Backend) {
 fn draw_complex(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[20/28] Nested Containers");
+    backend.blit(atlas_1(), 10, 10, "[20/26] Nested Containers");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "Containers nest freely:");
     backend.blit(atlas_2(), 10, 66, "col in row, row in col...");
@@ -714,7 +704,7 @@ fn draw_complex(backend: &mut dyn Backend) {
 fn draw_containerbg(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[8/28] Container Background");
+    backend.blit(atlas_1(), 10, 10, "[8/26] Container Background");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "style={bg=...} on a container fills");
     backend.blit(atlas_2(), 10, 66, "behind all children.");
@@ -761,7 +751,7 @@ fn draw_containerbg(backend: &mut dyn Backend) {
 fn draw_containerborder(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[13/28] Container Border");
+    backend.blit(atlas_1(), 10, 10, "[13/26] Container Border");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "border= on a container is only drawn");
     backend.blit(atlas_2(), 10, 66, "when explicitly set (not inherited).");
@@ -777,60 +767,32 @@ fn draw_containerborder(backend: &mut dyn Backend) {
     backend.fill_rect(504, 144, 192, 2, rgb!(255, 255, 255));
     backend.fill_rect(504, 94, 2, 52, rgb!(255, 255, 255));
     backend.fill_rect(694, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(3, 153, 394, 79, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 14, 176, "With border A");
-    backend.fill_rect(3, 153, 394, 1, rgb!(255, 255, 255));
-    backend.fill_rect(3, 231, 394, 1, rgb!(255, 255, 255));
-    backend.fill_rect(3, 153, 1, 79, rgb!(255, 255, 255));
-    backend.fill_rect(396, 153, 1, 79, rgb!(255, 255, 255));
-    backend.fill_rect(3, 232, 394, 80, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 14, 256, "With border B");
-    backend.fill_rect(3, 232, 394, 1, rgb!(255, 255, 255));
-    backend.fill_rect(3, 311, 394, 1, rgb!(255, 255, 255));
-    backend.fill_rect(3, 232, 1, 80, rgb!(255, 255, 255));
-    backend.fill_rect(396, 232, 1, 80, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 400, 3, rgb!(0, 255, 0));
-    backend.fill_rect(0, 312, 400, 3, rgb!(0, 255, 0));
-    backend.fill_rect(0, 150, 3, 165, rgb!(0, 255, 0));
-    backend.fill_rect(397, 150, 3, 165, rgb!(0, 255, 0));
-    backend.fill_rect(400, 150, 400, 82, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 411, 175, "No border C");
-    backend.fill_rect(400, 150, 400, 1, rgb!(255, 255, 255));
-    backend.fill_rect(400, 231, 400, 1, rgb!(255, 255, 255));
-    backend.fill_rect(400, 150, 1, 82, rgb!(255, 255, 255));
-    backend.fill_rect(799, 150, 1, 82, rgb!(255, 255, 255));
-    backend.fill_rect(400, 232, 400, 83, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 411, 257, "No border D");
-    backend.fill_rect(400, 232, 400, 1, rgb!(255, 255, 255));
-    backend.fill_rect(400, 314, 400, 1, rgb!(255, 255, 255));
-    backend.fill_rect(400, 232, 1, 83, rgb!(255, 255, 255));
-    backend.fill_rect(799, 232, 1, 83, rgb!(255, 255, 255));
-    backend.fill_rect(2, 317, 396, 161, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 13, 381, "Yellow E");
-    backend.fill_rect(2, 317, 396, 1, rgb!(255, 255, 255));
-    backend.fill_rect(2, 477, 396, 1, rgb!(255, 255, 255));
-    backend.fill_rect(2, 317, 1, 161, rgb!(255, 255, 255));
-    backend.fill_rect(397, 317, 1, 161, rgb!(255, 255, 255));
-    backend.fill_rect(0, 315, 400, 2, rgb!(255, 255, 0));
-    backend.fill_rect(0, 478, 400, 2, rgb!(255, 255, 0));
-    backend.fill_rect(0, 315, 2, 165, rgb!(255, 255, 0));
-    backend.fill_rect(398, 315, 2, 165, rgb!(255, 255, 0));
-    backend.fill_rect(402, 317, 396, 161, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 413, 381, "Red F");
-    backend.fill_rect(402, 317, 396, 1, rgb!(255, 255, 255));
-    backend.fill_rect(402, 477, 396, 1, rgb!(255, 255, 255));
-    backend.fill_rect(402, 317, 1, 161, rgb!(255, 255, 255));
-    backend.fill_rect(797, 317, 1, 161, rgb!(255, 255, 255));
-    backend.fill_rect(400, 315, 400, 2, rgb!(255, 0, 0));
-    backend.fill_rect(400, 478, 400, 2, rgb!(255, 0, 0));
-    backend.fill_rect(400, 315, 2, 165, rgb!(255, 0, 0));
-    backend.fill_rect(798, 315, 2, 165, rgb!(255, 0, 0));
+    backend.fill_rect(3, 153, 260, 162, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 13, 218, "Border on col");
+    backend.fill_rect(3, 315, 260, 162, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 13, 380, "(green, 3px)");
+    backend.fill_rect(0, 150, 266, 3, rgb!(0, 255, 0));
+    backend.fill_rect(0, 477, 266, 3, rgb!(0, 255, 0));
+    backend.fill_rect(0, 150, 3, 330, rgb!(0, 255, 0));
+    backend.fill_rect(263, 150, 3, 330, rgb!(0, 255, 0));
+    backend.fill_rect(266, 150, 266, 165, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 276, 216, "No border");
+    backend.fill_rect(266, 315, 266, 165, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 276, 381, "on this col");
+    backend.fill_rect(534, 152, 264, 163, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 544, 217, "Border on col");
+    backend.fill_rect(534, 315, 264, 163, rgb!(0, 0, 0));
+    backend.blit(atlas_4(), 544, 380, "(yellow, 2px)");
+    backend.fill_rect(532, 150, 268, 2, rgb!(255, 255, 0));
+    backend.fill_rect(532, 478, 268, 2, rgb!(255, 255, 0));
+    backend.fill_rect(532, 150, 2, 330, rgb!(255, 255, 0));
+    backend.fill_rect(798, 150, 2, 330, rgb!(255, 255, 0));
 }
 
 fn draw_dynalign(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[24/28] Dynamic Label Alignment");
+    backend.blit(atlas_1(), 10, 10, "[24/26] Dynamic Label Alignment");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "lbl= cells also support align=.");
     backend.blit(atlas_2(), 10, 66, "Uses text_width() at runtime.");
@@ -866,7 +828,7 @@ fn draw_dynalign(backend: &mut dyn Backend) {
 fn draw_dynupdate(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[18/28] Dynamic Update API");
+    backend.blit(atlas_1(), 10, 10, "[18/26] Dynamic Update API");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "API is update_params() (not update_changes).");
     backend.blit(atlas_2(), 10, 66, "Pass &[(&str, &str)] to update lbl= cells.");
@@ -909,7 +871,7 @@ fn draw_dynupdate(backend: &mut dyn Backend) {
 fn draw_dynamic(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[17/28] Dynamic Labels");
+    backend.blit(atlas_1(), 10, 10, "[17/26] Dynamic Labels");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "lbl= cells get values via update_params().");
     backend.blit(atlas_2(), 10, 66, "They start blank; populate on first update.");
@@ -937,49 +899,10 @@ fn draw_dynamic(backend: &mut dyn Backend) {
     backend.fill_rect(799, 315, 1, 165, rgb!(255, 255, 255));
 }
 
-fn draw_extrachars(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[26/28] Extra Characters");
-    backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
-    backend.blit(atlas_2(), 10, 44, "extra={...} in font spec adds non-ASCII");
-    backend.blit(atlas_2(), 10, 66, "code points like ± µ ° to the atlas.");
-    backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-    backend.blit(atlas_3(), 116, 104, "Prev");
-    backend.fill_rect(104, 94, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(104, 144, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(104, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(294, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-    backend.blit(atlas_3(), 516, 104, "Next");
-    backend.fill_rect(504, 94, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(504, 144, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(504, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(694, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 266, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 11, 299, "±0.5V");
-    backend.fill_rect(0, 150, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 479, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(265, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 266, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 277, 299, "100µA");
-    backend.fill_rect(266, 150, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 479, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(531, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 268, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_4(), 543, 299, "23.1°C");
-    backend.fill_rect(532, 150, 268, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 479, 268, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(799, 150, 1, 330, rgb!(255, 255, 255));
-}
-
 fn draw_fixed(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[5/28] Fixed Sizes");
+    backend.blit(atlas_1(), 10, 10, "[5/26] Fixed Sizes");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "size= gives a child a fixed pixel size.");
     backend.blit(atlas_2(), 10, 66, "Weighted children share the rest.");
@@ -1012,7 +935,7 @@ fn draw_fixed(backend: &mut dyn Backend) {
 fn draw_flushcells(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[11/28] Flush Cells");
+    backend.blit(atlas_1(), 10, 10, "[11/26] Flush Cells");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "margin_left=0 / margin_right=0 makes");
     backend.blit(atlas_2(), 10, 66, "adjacent cells touch (no gap).");
@@ -1075,7 +998,7 @@ fn draw_flushcells(backend: &mut dyn Backend) {
 fn draw_focusdisable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[16/28] Focus Disable");
+    backend.blit(atlas_1(), 10, 10, "[16/26] Focus Disable");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "focusable=false on a press= cell:");
     backend.blit(atlas_2(), 10, 66, "button works but does not highlight.");
@@ -1112,7 +1035,7 @@ fn draw_focusdisable(backend: &mut dyn Backend) {
 fn draw_focusable(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[15/28] Focus Behavior");
+    backend.blit(atlas_1(), 10, 10, "[15/26] Focus Behavior");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "Focused cell redraws with style.focused.");
     backend.blit(atlas_2(), 10, 66, "Default: focusable iff press= is set.");
@@ -1172,52 +1095,13 @@ fn draw_focusable(backend: &mut dyn Backend) {
     backend.fill_rect(799, 370, 1, 110, rgb!(255, 255, 255));
 }
 
-fn draw_fontchainextra(backend: &mut dyn Backend) {
-    backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
-    backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[27/28] Font Chain + Extra");
-    backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
-    backend.blit(atlas_2(), 10, 44, "Chain + extra: MyriadPro + FontAwesome +");
-    backend.blit(atlas_2(), 10, 66, "extra code points, all in one font spec.");
-    backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-    backend.blit(atlas_3(), 116, 104, "Prev");
-    backend.fill_rect(104, 94, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(104, 144, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(104, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(294, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-    backend.blit(atlas_3(), 516, 104, "Next");
-    backend.fill_rect(504, 94, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(504, 144, 192, 2, rgb!(255, 255, 255));
-    backend.fill_rect(504, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(694, 94, 2, 52, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 266, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 11, 299, " ±5V");
-    backend.fill_rect(0, 150, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 479, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(0, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(265, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 266, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 277, 299, " 25°C");
-    backend.fill_rect(266, 150, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 479, 266, 1, rgb!(255, 255, 255));
-    backend.fill_rect(266, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(531, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 268, 330, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 543, 299, " µA ok");
-    backend.fill_rect(532, 150, 268, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 479, 268, 1, rgb!(255, 255, 255));
-    backend.fill_rect(532, 150, 1, 330, rgb!(255, 255, 255));
-    backend.fill_rect(799, 150, 1, 330, rgb!(255, 255, 255));
-}
-
 fn draw_fonticons(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[25/28] Font Fallback + Icons");
+    backend.blit(atlas_1(), 10, 10, "[25/26] Font Chain + Icons + Extra");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
-    backend.blit(atlas_2(), 10, 44, "Font chain: primary + FontAwesome fallback.");
-    backend.blit(atlas_2(), 10, 66, "Icons render from FA when missing in primary.");
+    backend.blit(atlas_2(), 10, 44, "Font chain: primary + FA fallback +");
+    backend.blit(atlas_2(), 10, 66, "extra code points (± µ °).");
     backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
     backend.blit(atlas_3(), 116, 104, "Prev");
     backend.fill_rect(104, 94, 192, 2, rgb!(255, 255, 255));
@@ -1249,19 +1133,19 @@ fn draw_fonticons(backend: &mut dyn Backend) {
     backend.fill_rect(532, 150, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(799, 150, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(0, 260, 266, 110, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 11, 299, " Ok");
+    backend.blit(atlas_12(), 11, 299, " ±5V");
     backend.fill_rect(0, 260, 266, 1, rgb!(255, 255, 255));
     backend.fill_rect(0, 369, 266, 1, rgb!(255, 255, 255));
     backend.fill_rect(0, 260, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(265, 260, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(266, 260, 266, 110, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 277, 299, " Cancel");
+    backend.blit(atlas_12(), 277, 299, " 25°C");
     backend.fill_rect(266, 260, 266, 1, rgb!(255, 255, 255));
     backend.fill_rect(266, 369, 266, 1, rgb!(255, 255, 255));
     backend.fill_rect(266, 260, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(531, 260, 1, 110, rgb!(255, 255, 255));
     backend.fill_rect(532, 260, 268, 110, rgb!(0, 0, 0));
-    backend.blit(atlas_12(), 543, 299, " Delete");
+    backend.blit(atlas_12(), 543, 299, " 100µA");
     backend.fill_rect(532, 260, 268, 1, rgb!(255, 255, 255));
     backend.fill_rect(532, 369, 268, 1, rgb!(255, 255, 255));
     backend.fill_rect(532, 260, 1, 110, rgb!(255, 255, 255));
@@ -1289,7 +1173,7 @@ fn draw_fonticons(backend: &mut dyn Backend) {
 fn draw_hello(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[1/28] Col Layout");
+    backend.blit(atlas_1(), 10, 10, "[1/26] Col Layout");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "col stacks children vertically.");
     backend.blit(atlas_2(), 10, 66, "Each child gets equal height.");
@@ -1328,7 +1212,7 @@ fn draw_hello(backend: &mut dyn Backend) {
 fn draw_leafstyle(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[7/28] Leaf Style");
+    backend.blit(atlas_1(), 10, 10, "[7/26] Leaf Style");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "leaf_style= sets style for all leaves");
     backend.blit(atlas_2(), 10, 66, "in a container. Per-node style= overrides.");
@@ -1409,7 +1293,7 @@ fn draw_leafstyle(backend: &mut dyn Backend) {
 fn draw_margin(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[10/28] Margins");
+    backend.blit(atlas_1(), 10, 10, "[10/26] Margins");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "margin= shrinks from outside.");
     backend.blit(atlas_2(), 10, 66, "margin_left/top/right/bottom: per-side.");
@@ -1466,7 +1350,7 @@ fn draw_margin(backend: &mut dyn Backend) {
 fn draw_multilinealign(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[23/28] Multiline Alignment");
+    backend.blit(atlas_1(), 10, 10, "[23/26] Multiline Alignment");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "Multiline text respects align=.");
     backend.blit(atlas_2(), 10, 66, "Each line is aligned independently.");
@@ -1512,7 +1396,7 @@ fn draw_multilinealign(backend: &mut dyn Backend) {
 fn draw_pad(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[9/28] Padding");
+    backend.blit(atlas_1(), 10, 10, "[9/26] Padding");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "pad= adds internal space.");
     backend.blit(atlas_2(), 10, 66, "pad_left/top/right/bottom: per-side.");
@@ -1569,7 +1453,7 @@ fn draw_pad(backend: &mut dyn Backend) {
 fn draw_popup(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(202, 74, 396, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 212, 84, "[28/28] Popup Positioning");
+    backend.blit(atlas_1(), 212, 84, "[26/26] Popup Positioning");
     backend.fill_rect(202, 114, 396, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 212, 118, "menu_size={w,h}: menu size in pixels.");
     backend.blit(atlas_2(), 212, 140, "menu_align={x,y}+menu_anchor=: position.");
@@ -1594,7 +1478,7 @@ fn draw_popup(backend: &mut dyn Backend) {
 fn draw_progress(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[19/28] Progress Bar");
+    backend.blit(atlas_1(), 10, 10, "[19/26] Progress Bar");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "render=\"progress bar\":");
     backend.blit(atlas_2(), 10, 66, "lbl= value is a float in [0,1].");
@@ -1635,7 +1519,7 @@ fn draw_progress(backend: &mut dyn Backend) {
 fn draw_rows(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[2/28] Row Layout");
+    backend.blit(atlas_1(), 10, 10, "[2/26] Row Layout");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "row places children side by side.");
     backend.blit(atlas_2(), 10, 66, "(equal width by default)");
@@ -1698,7 +1582,7 @@ fn draw_rows(backend: &mut dyn Backend) {
 fn draw_weighted(backend: &mut dyn Backend) {
     backend.fill_rect(0, 0, 800, 480, rgb!(0, 0, 0));
     backend.fill_rect(0, 0, 800, 40, rgb!(60, 60, 60));
-    backend.blit(atlas_1(), 10, 10, "[4/28] Proportional Weights");
+    backend.blit(atlas_1(), 10, 10, "[4/26] Proportional Weights");
     backend.fill_rect(0, 40, 800, 50, rgb!(0, 0, 0));
     backend.blit(atlas_2(), 10, 44, "weight= sets proportional space.");
     backend.blit(atlas_2(), 10, 66, "Default weight is 1.");
@@ -2175,39 +2059,6 @@ fn draw_focus_dynamic(backend: &mut dyn Backend, focused: Option<usize>) {
     }
 }
 
-fn draw_focus_extrachars(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 124, 104, "Prev");
-        backend.fill_rect(104, 94, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(104, 136, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(104, 94, 10, 52, rgb!(255, 255, 255));
-        backend.fill_rect(286, 94, 10, 52, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 116, 104, "Prev");
-        backend.fill_rect(104, 94, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(104, 144, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(104, 94, 2, 52, rgb!(255, 255, 255));
-        backend.fill_rect(294, 94, 2, 52, rgb!(255, 255, 255));
-    }
-    if focused == Some(1) {
-        backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 524, 104, "Next");
-        backend.fill_rect(504, 94, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(504, 136, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(504, 94, 10, 52, rgb!(255, 255, 255));
-        backend.fill_rect(686, 94, 10, 52, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 516, 104, "Next");
-        backend.fill_rect(504, 94, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(504, 144, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(504, 94, 2, 52, rgb!(255, 255, 255));
-        backend.fill_rect(694, 94, 2, 52, rgb!(255, 255, 255));
-    }
-}
-
 fn draw_focus_fixed(backend: &mut dyn Backend, focused: Option<usize>) {
     if focused == Some(0) {
         backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
@@ -2403,39 +2254,6 @@ fn draw_focus_focusable(backend: &mut dyn Backend, focused: Option<usize>) {
         backend.fill_rect(0, 479, 400, 1, rgb!(255, 255, 255));
         backend.fill_rect(0, 370, 1, 110, rgb!(255, 255, 255));
         backend.fill_rect(399, 370, 1, 110, rgb!(255, 255, 255));
-    }
-}
-
-fn draw_focus_fontchainextra(backend: &mut dyn Backend, focused: Option<usize>) {
-    if focused == Some(0) {
-        backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 124, 104, "Prev");
-        backend.fill_rect(104, 94, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(104, 136, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(104, 94, 10, 52, rgb!(255, 255, 255));
-        backend.fill_rect(286, 94, 10, 52, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(104, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 116, 104, "Prev");
-        backend.fill_rect(104, 94, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(104, 144, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(104, 94, 2, 52, rgb!(255, 255, 255));
-        backend.fill_rect(294, 94, 2, 52, rgb!(255, 255, 255));
-    }
-    if focused == Some(1) {
-        backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 524, 104, "Next");
-        backend.fill_rect(504, 94, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(504, 136, 192, 10, rgb!(255, 255, 255));
-        backend.fill_rect(504, 94, 10, 52, rgb!(255, 255, 255));
-        backend.fill_rect(686, 94, 10, 52, rgb!(255, 255, 255));
-    } else {
-        backend.fill_rect(504, 94, 192, 52, rgb!(30, 80, 180));
-        backend.blit(atlas_3(), 516, 104, "Next");
-        backend.fill_rect(504, 94, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(504, 144, 192, 2, rgb!(255, 255, 255));
-        backend.fill_rect(504, 94, 2, 52, rgb!(255, 255, 255));
-        backend.fill_rect(694, 94, 2, 52, rgb!(255, 255, 255));
     }
 }
 
@@ -2997,24 +2815,6 @@ fn update_events_dynamic<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     }
 }
 
-fn update_events_extrachars<C: Callbacks>(events: &[InputEvent], state: &mut C) {
-    for ev in events {
-        if let InputEvent::Press { x, y } = ev {
-            let new_focus =
-                if *x >= 104 && *x < 296 && *y >= 94 && *y < 146 { Some(0) }
-                else if *x >= 504 && *x < 696 && *y >= 94 && *y < 146 { Some(1) }
-                else { None };
-            *FOCUSED.lock().unwrap() = new_focus;
-            if *x >= 104 && *x < 296 && *y >= 94 && *y < 146 {
-                state.nav(&["FontIcons"]);
-            }
-            if *x >= 504 && *x < 696 && *y >= 94 && *y < 146 {
-                state.nav(&["FontChainExtra"]);
-            }
-        }
-    }
-}
-
 fn update_events_fixed<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
@@ -3106,24 +2906,6 @@ fn update_events_focusable<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     }
 }
 
-fn update_events_fontchainextra<C: Callbacks>(events: &[InputEvent], state: &mut C) {
-    for ev in events {
-        if let InputEvent::Press { x, y } = ev {
-            let new_focus =
-                if *x >= 104 && *x < 296 && *y >= 94 && *y < 146 { Some(0) }
-                else if *x >= 504 && *x < 696 && *y >= 94 && *y < 146 { Some(1) }
-                else { None };
-            *FOCUSED.lock().unwrap() = new_focus;
-            if *x >= 104 && *x < 296 && *y >= 94 && *y < 146 {
-                state.nav(&["ExtraChars"]);
-            }
-            if *x >= 504 && *x < 696 && *y >= 94 && *y < 146 {
-                state.nav(&["Popup"]);
-            }
-        }
-    }
-}
-
 fn update_events_fonticons<C: Callbacks>(events: &[InputEvent], state: &mut C) {
     for ev in events {
         if let InputEvent::Press { x, y } = ev {
@@ -3136,7 +2918,7 @@ fn update_events_fonticons<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 state.nav(&["DynAlign"]);
             }
             if *x >= 504 && *x < 696 && *y >= 94 && *y < 146 {
-                state.nav(&["ExtraChars"]);
+                state.nav(&["Popup"]);
             }
         }
     }
@@ -3241,7 +3023,7 @@ fn update_events_popup<C: Callbacks>(events: &[InputEvent], state: &mut C) {
                 else { None };
             *FOCUSED.lock().unwrap() = new_focus;
             if *x >= 255 && *x < 346 && *y >= 168 && *y < 220 {
-                state.nav(&["FontChainExtra"]);
+                state.nav(&["FontIcons"]);
             }
             if *x >= 452 && *x < 543 && *y >= 168 && *y < 220 {
                 state.nav(&["Hello"]);
@@ -3515,18 +3297,6 @@ fn update_params_dynamic(backend: &mut dyn Backend, changes: &[(&str, &str)]) {
     }
 }
 
-fn update_params_extrachars(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    {
-        let focused = *FOCUSED.lock().unwrap();
-        let mut last = LAST_DRAWN_FOCUS.lock().unwrap();
-        if *last != focused {
-            *last = focused;
-            drop(last);
-            draw_focus_extrachars(backend, focused);
-        }
-    }
-}
-
 fn update_params_fixed(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
     {
         let focused = *FOCUSED.lock().unwrap();
@@ -3571,18 +3341,6 @@ fn update_params_focusable(backend: &mut dyn Backend, _changes: &[(&str, &str)])
             *last = focused;
             drop(last);
             draw_focus_focusable(backend, focused);
-        }
-    }
-}
-
-fn update_params_fontchainextra(backend: &mut dyn Backend, _changes: &[(&str, &str)]) {
-    {
-        let focused = *FOCUSED.lock().unwrap();
-        let mut last = LAST_DRAWN_FOCUS.lock().unwrap();
-        if *last != focused {
-            *last = focused;
-            drop(last);
-            draw_focus_fontchainextra(backend, focused);
         }
     }
 }
