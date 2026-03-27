@@ -1287,26 +1287,20 @@ for _, name in ipairs(menu_names) do
 	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	if #dyn_ops > 0 then
-		-- Guard behind a check for matching label names
+		-- Guard behind a check for matching label names (deduplicated)
+		local seen_lbl = {}
 		local conds = {}
 		for _, op in ipairs(dyn_ops) do
-			conds[#conds+1] = ("n == %q"):format(op.lbl)
+			if not seen_lbl[op.lbl] then
+				seen_lbl[op.lbl] = true
+				conds[#conds+1] = ("n == %q"):format(op.lbl)
+			end
 		end
 		e("    if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
 		e("        for &(name, val) in changes {")
-		if #dyn_ops == 1 then
-			local op = dyn_ops[1]
+		for _, op in ipairs(dyn_ops) do
 			e("            if name == %q {", op.lbl)
 			emit_dyn_blit(op, "                ")
-			e("            }")
-		else
-			e("            match name {")
-			for _, op in ipairs(dyn_ops) do
-				e("                %q => {", op.lbl)
-				emit_dyn_blit(op, "                    ")
-				e("                }")
-			end
-			e("                _ => {}")
 			e("            }")
 		end
 		e("        }")

@@ -167,7 +167,7 @@ menus = {
    },
 
    Borders = {"col",
-      border = {width = 0},  -- reset so the demos below are unambiguous
+      leaf_style = {border = {width = 0}},  -- reset so the demos below are unambiguous
       {"Borders",                                           size = 40, style = s_title},
       {"border= draws a border.\nside= restricts to one edge.", size = 50, style = s_desc},
       nav("Margin", "Clickable"),
