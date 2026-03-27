@@ -560,12 +560,18 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 
 		-- Text alignment: "left" (default), "center", "right"
+		-- Read from node.align, node.style.align, or leaf_style.align
 		local align = "left"
-		if type(node) == "table" and node.align then
-			align = node.align
-			if align ~= "left" and align ~= "center" and align ~= "right" then
-				warn("unknown align=%q, using 'left'", align)
-				align = "left"
+		if type(node) == "table" then
+			local a = node.align
+				or (type(node.style) == "table" and node.style.align)
+				or (leaf_style and leaf_style.align)
+			if a then
+				align = a
+				if align ~= "left" and align ~= "center" and align ~= "right" then
+					warn("unknown align=%q, using 'left'", align)
+					align = "left"
+				end
 			end
 		end
 
