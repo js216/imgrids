@@ -1,5 +1,5 @@
 use super::Backend;
-use crate::{InputEvent, Pixel};
+use crate::{InputEvent, Pixel, Renderer};
 use std::cell::RefCell;
 
 extern "C" {
@@ -23,13 +23,6 @@ pub struct WebBackend {
 }
 
 impl Backend for WebBackend {
-    fn width(&self) -> usize {
-        self.width
-    }
-    fn height(&self) -> usize {
-        self.height
-    }
-
     fn clear(&mut self, color: Pixel) {
         self.pixels.fill(color);
         self.dirty = true;
@@ -54,9 +47,11 @@ impl Backend for WebBackend {
         self.dirty = true;
     }
 
-    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        draw_fn(&mut self.pixels, self.width);
+    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize {
+        let width = self.width;
+        let end_x = atlas.blit(&mut self.pixels, width, x, y, text);
         self.dirty = true;
+        end_x
     }
 
     fn flush(&mut self) {

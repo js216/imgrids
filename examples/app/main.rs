@@ -28,16 +28,16 @@ fn current_values(t: f32) -> [(&'static str, String); 2] {
 fn main() {
     let mut backend = imgrids::init(ui::SCR_W, ui::SCR_H);
     let mut state = GuiState { menu: ui::Menu::Hello, quit: false, t: 0.0 };
+    ui::force_redraw();
 
-    loop {
+    while !state.quit {
         let raw = current_values(state.t);
         let changes: Vec<(&str, &str)> = raw.iter().map(|(n, v)| (*n, v.as_str())).collect();
 
         ui::update_events(backend.poll_events(), &mut state);
         ui::update_menu(&mut *backend, state.menu);
-        ui::update_changes(&mut *backend, &changes);
+        ui::update_params(&mut *backend, &changes);
 
-        if state.quit { return; }
         state.t += 0.033;
         imgrids::sleep(33);
     }

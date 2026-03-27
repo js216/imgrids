@@ -1,7 +1,7 @@
 use imgrids::fonts::font_vga16::FONT;
 use imgrids::raster::RasterAtlas;
 use imgrids::ttf::TtfAtlas;
-use imgrids::{rgb, InputEvent, Renderer};
+use imgrids::{rgb, InputEvent};
 
 const WHITE: (u8, u8, u8) = (255, 255, 255);
 const BLACK: (u8, u8, u8) = (0, 0, 0);
@@ -17,10 +17,8 @@ fn main() {
     let mut x0 = 0;
     let mut y0 = 0;
 
-    backend.render(&mut |fb, stride| {
-        font.blit(fb, stride, 100, 100, "Hello,");
-        ttf.blit(fb, stride, 100, 132, "world!");
-    });
+    backend.blit(&font, 100, 100, "Hello,");
+    backend.blit(&ttf, 100, 132, "world!");
     backend.flush();
 
     loop {

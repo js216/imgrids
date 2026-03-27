@@ -77,12 +77,6 @@ pub trait Renderer {
     /// past the last drawn pixel (i.e. x + rendered width).
     fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize;
 
-    /// Convenience: lock the backend, draw, unlock. For single draws only;
-    /// prefer `blit` inside a `render` closure when drawing multiple strings.
-    fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str) {
-        backend.render(&mut |fb, stride| { self.blit(fb, stride, x, y, text); });
-    }
-
     fn cell_height(&self) -> usize;
     fn char_width(&self, c: char) -> usize;
     fn text_width(&self, text: &str) -> usize {
@@ -98,9 +92,6 @@ pub mod ttf;
 ////////////////////////////////////////////////////////////////////////////////
 
 pub trait Backend {
-    fn width(&self) -> usize;
-    fn height(&self) -> usize;
-
     fn clear(&mut self, color: Pixel);
     fn fill_rect(
         &mut self,
@@ -111,23 +102,7 @@ pub trait Backend {
         color: Pixel,
     );
 
-    fn draw_border(
-        &mut self,
-        x: usize,
-        y: usize,
-        w: usize,
-        h: usize,
-        thickness: usize,
-        color: Pixel,
-    ) {
-        self.fill_rect(x, y, w, thickness, color);
-        self.fill_rect(x, y + h - thickness, w, thickness, color);
-        self.fill_rect(x, y, thickness, h, color);
-        self.fill_rect(x + w - thickness, y, thickness, h, color);
-    }
-
-    /// Locks the pixel buffer, calls `draw_fn(pixels, stride)`, then presents.
-    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize));
+    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize;
 
     /// Drains pending input events into an internal buffer and returns them.
     fn poll_events(&mut self) -> &[InputEvent] {
@@ -142,12 +117,6 @@ pub trait Backend {
 }
 
 impl Backend for Box<dyn Backend> {
-    fn width(&self) -> usize {
-        (**self).width()
-    }
-    fn height(&self) -> usize {
-        (**self).height()
-    }
     fn clear(&mut self, color: Pixel) {
         (**self).clear(color)
     }
@@ -161,8 +130,8 @@ impl Backend for Box<dyn Backend> {
     ) {
         (**self).fill_rect(x, y, w, h, color)
     }
-    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
-        (**self).render(draw_fn)
+    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize {
+        (**self).blit(atlas, x, y, text)
     }
     fn poll_events(&mut self) -> &[InputEvent] {
         (**self).poll_events()

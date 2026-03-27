@@ -11,7 +11,7 @@ examples/app/ui.rs: $(LUA)
 	lua scripts/layout.lua < examples/demo.lua > $@
 
 run: target/sdl/.built
-	target/release/examples/raw-sdl
+	target/release/examples/app-sdl
 
 target/sdl/.built: $(RS)
 	CARGO_TARGET_DIR=target/sdl cargo clippy --features sdl,bpp16 $(EX_FLAGS) -- -D warnings

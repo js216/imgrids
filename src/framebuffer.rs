@@ -202,13 +202,6 @@ impl Framebuf {
 }
 
 impl Backend for Framebuf {
-    fn width(&self) -> usize {
-        self.width
-    }
-    fn height(&self) -> usize {
-        self.height
-    }
-
     #[inline]
     fn clear(&mut self, color: Pixel) {
         self.pixels_mut().fill(color);
@@ -230,9 +223,10 @@ impl Backend for Framebuf {
         }
     }
 
-    fn render(&mut self, draw_fn: &mut dyn FnMut(&mut [Pixel], usize)) {
+    fn blit(&mut self, atlas: &dyn crate::Renderer, x: usize, y: usize, text: &str) -> usize {
         let stride = self.stride;
-        draw_fn(self.pixels_mut(), stride);
+        let pixels = self.pixels_mut();
+        atlas.blit(pixels, stride, x, y, text)
     }
 
     fn poll_events(&mut self) -> &[InputEvent] {

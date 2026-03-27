@@ -858,7 +858,7 @@ for _, a in ipairs(atlases) do
 end
 for _, ops in pairs(menu_ops) do
 	for _, op in ipairs(ops) do
-		if op.kind == "dynamic" or op.kind == "static" then
+		if op.kind == "dynamic" and op.align ~= "left" then
 			need_renderer = true
 			break
 		end
@@ -1028,7 +1028,6 @@ for _, name in ipairs(menu_names) do
 	e("            Menu::%s => draw_%s(backend),", name, name:lower())
 end
 e("        }")
-e("        backend.flush();")
 e("    }")
 e("}")
 e("")
@@ -1038,11 +1037,11 @@ e("    *CURRENT_MENU.lock().unwrap() = None;")
 e("}")
 e("")
 
--- update_changes()
-e("pub fn update_changes(backend: &mut dyn Backend, changes: &[(&str, &str)]) {")
+-- update_params()
+e("pub fn update_params(backend: &mut dyn Backend, changes: &[(&str, &str)]) {")
 e("    match *CURRENT_MENU.lock().unwrap() {")
 for _, name in ipairs(menu_names) do
-	e("        Some(Menu::%s) => update_changes_%s(backend, changes),", name, name:lower())
+	e("        Some(Menu::%s) => update_params_%s(backend, changes),", name, name:lower())
 end
 e("        None => {}")
 e("    }")
@@ -1058,7 +1057,7 @@ for _, name in ipairs(menu_names) do
 		if op.kind == "static" then
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			for i, line in ipairs(op.lines) do
-				e("    %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, op.line_xs[i], op.text_y + (i - 1) * op.line_step, line)
+				e("    backend.blit(%s(), %d, %d, %q);", op.atlas.fn_name, op.line_xs[i], op.text_y + (i - 1) * op.line_step, line)
 			end
 		elseif op.kind == "dynamic" or op.kind == "progress" then
 			local bg = op.atlas and op.atlas.bg or op.bg
@@ -1078,15 +1077,11 @@ for _, name in ipairs(menu_names) do
 					e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
 				end
 			else
-				e(
-					"    backend.draw_border(%d, %d, %d, %d, %d, %s);",
-					op.x,
-					op.y,
-					op.w,
-					op.h,
-					op.thickness,
-					rgb_lit(op.color)
-				)
+				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
+				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, w, t, c)
+				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y + h - t, w, t, c)
+				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, t, h, c)
+				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
 			end
 		end
 	end
@@ -1105,20 +1100,17 @@ local function get_focusable_ops(ops)
 	return fops
 end
 
--- Helper: emit blit code for a single dynamic label (inside render closure)
+-- Helper: emit blit code for a single dynamic label
 local function emit_dyn_blit(op, indent)
 	local ch = cell_height_est(op.atlas.font)
 	local bg = rgb_lit(op.atlas.bg)
 	local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
 	if op.align == "left" then
-		e("%slet end_x = %s().blit(fb, stride, %d, %d, val);",
+		e("%slet end_x = backend.blit(%s(), %d, %d, val);",
 			indent, op.atlas.fn_name, op.text_x, op.text_y)
 		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
 		e("%sif prev != usize::MAX && prev > end_x {", indent)
-		e("%s    for gy in 0..%d_usize {", indent, ch)
-		e("%s        let s = (%d + gy) * stride + end_x;", indent, op.text_y)
-		e("%s        fb[s..s + prev - end_x].fill(%s);", indent, bg)
-		e("%s    }", indent)
+		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
 		e("%s}", indent)
 	else
 		-- Center/right: clear full area then blit at computed x
@@ -1126,10 +1118,7 @@ local function emit_dyn_blit(op, indent)
 		e("%slet prev = %s.load(Ordering::Relaxed);", indent, dyn_end)
 		e("%slet clear_w = if prev == usize::MAX { %d } else { prev.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
-		e("%sfor gy in 0..%d_usize {", indent, ch)
-		e("%s    let s = (%d + gy) * stride + %d;", indent, op.text_y, op.text_x)
-		e("%s    fb[s..s + clear_w].fill(%s);", indent, bg)
-		e("%s}", indent)
+		e("%sbackend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, ch, bg)
 		if op.align == "center" then
 			e("%slet tw = a.text_width(val);", indent)
 			e("%slet bx = %d + (%d_usize.saturating_sub(tw)) / 2;",
@@ -1139,7 +1128,7 @@ local function emit_dyn_blit(op, indent)
 			e("%slet bx = %d + %d_usize.saturating_sub(tw);",
 				indent, op.text_x, op.inner_w)
 		end
-		e("%slet end_x = a.blit(fb, stride, bx, %d, val);", indent, op.text_y)
+		e("%slet end_x = backend.blit(a, bx, %d, val);", indent, op.text_y)
 		e("%s%s.store(end_x, Ordering::Relaxed);", indent, dyn_end)
 	end
 end
@@ -1162,7 +1151,11 @@ local function emit_border(indent, op_x, op_y, op_w, op_h, b)
 			e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2 + w2 - t, y2, t, h2, c)
 		end
 	else
-		e("%sbackend.draw_border(%d, %d, %d, %d, %d, %s);", i, op_x, op_y, op_w, op_h, b.width, rgb_lit(b.color))
+		local t, c = b.width, rgb_lit(b.color)
+		e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, op_x, op_y, op_w, t, c)
+		e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, op_x, op_y + op_h - t, op_w, t, c)
+		e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, op_x, op_y, t, op_h, c)
+		e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, op_x + op_w - t, op_y, t, op_h, c)
 	end
 end
 
@@ -1178,7 +1171,7 @@ for _, name in ipairs(menu_names) do
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
 					local fx = op.foc.line_xs[i] or op.foc.text_x
-					e("        %s().draw(backend, %d, %d, %q);",
+					e("        backend.blit(%s(), %d, %d, %q);",
 						op.foc.atlas.fn_name, fx,
 						op.foc.text_y + (i - 1) * op.foc.line_step, line)
 				end
@@ -1189,7 +1182,7 @@ for _, name in ipairs(menu_names) do
 			if op.kind == "static" then
 				for i, line in ipairs(op.lines) do
 					local lx = op.line_xs[i] or op.text_x
-					e("        %s().draw(backend, %d, %d, %q);", op.atlas.fn_name, lx, op.text_y + (i - 1) * op.line_step, line)
+					e("        backend.blit(%s(), %d, %d, %q);", op.atlas.fn_name, lx, op.text_y + (i - 1) * op.line_step, line)
 				end
 			end
 			emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
@@ -1291,34 +1284,32 @@ for _, name in ipairs(menu_names) do
 
 	local be_param = (#dyn_ops + #prog_ops + #fops) > 0 and "backend" or "_backend"
 	local chg_param = (#dyn_ops + #prog_ops) > 0 and "changes" or "_changes"
-	e("fn update_changes_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
+	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	if #dyn_ops > 0 then
-		-- Guard render() behind a check for matching label names
+		-- Guard behind a check for matching label names
 		local conds = {}
 		for _, op in ipairs(dyn_ops) do
 			conds[#conds+1] = ("n == %q"):format(op.lbl)
 		end
 		e("    if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
-		e("        backend.render(&mut |fb, stride| {")
-		e("            for &(name, val) in changes {")
+		e("        for &(name, val) in changes {")
 		if #dyn_ops == 1 then
 			local op = dyn_ops[1]
-			e("                if name == %q {", op.lbl)
-			emit_dyn_blit(op, "                    ")
-			e("                }")
+			e("            if name == %q {", op.lbl)
+			emit_dyn_blit(op, "                ")
+			e("            }")
 		else
-			e("                match name {")
+			e("            match name {")
 			for _, op in ipairs(dyn_ops) do
-				e("                    %q => {", op.lbl)
-				emit_dyn_blit(op, "                        ")
-				e("                    }")
+				e("                %q => {", op.lbl)
+				emit_dyn_blit(op, "                    ")
+				e("                }")
 			end
-			e("                    _ => {}")
-			e("                }")
+			e("                _ => {}")
+			e("            }")
 		end
-		e("            }")
-		e("        });")
+		e("        }")
 		e("    }")
 	end
 
