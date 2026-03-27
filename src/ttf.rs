@@ -31,6 +31,17 @@ impl TtfAtlas {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "no fonts"));
         }
         let cell_h = fonts[0].1;
+        let missing: Vec<&str> = fonts
+            .iter()
+            .map(|&(path, _)| path)
+            .filter(|path| !std::path::Path::new(path).exists())
+            .collect();
+        if !missing.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("missing font files: {}", missing.join(", ")),
+            ));
+        }
         let mut loaded = Vec::new();
         for &(path, _) in fonts {
             let data = std::fs::read(path)

@@ -298,6 +298,12 @@ impl Drop for Framebuf {
     }
 }
 
-pub fn init(_w: usize, _h: usize) -> Box<dyn super::Backend> {
-    Box::new(Framebuf::open("/dev/fb0").expect("open framebuffer"))
+pub fn init(w: usize, h: usize) -> Box<dyn super::Backend> {
+    let fb = Framebuf::open("/dev/fb0").expect("open framebuffer");
+    assert!(
+        fb.width == w && fb.height == h,
+        "framebuffer is {}x{} but app expects {}x{}",
+        fb.width, fb.height, w, h,
+    );
+    Box::new(fb)
 }
