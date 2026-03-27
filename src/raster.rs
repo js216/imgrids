@@ -68,7 +68,7 @@ impl RasterAtlas {
 }
 
 impl Renderer for RasterAtlas {
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
+    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let (gw, gh) = (self.glyph_w, self.glyph_h);
         let mut cx = x;
         for byte in text.bytes() {
@@ -80,6 +80,7 @@ impl Renderer for RasterAtlas {
             }
             cx += gw;
         }
+        cx
     }
 
     fn cell_height(&self) -> usize {

@@ -73,14 +73,14 @@ pub enum InputEvent {
 ////////////////////////////////////////////////////////////////////////////////
 
 pub trait Renderer {
-    /// Draw text into a raw pixel buffer. Use this inside a `backend.render()`
-    /// closure to batch multiple draws into a single framebuffer lock.
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str);
+    /// Draw text into a raw pixel buffer. Returns the x coordinate just
+    /// past the last drawn pixel (i.e. x + rendered width).
+    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize;
 
     /// Convenience: lock the backend, draw, unlock. For single draws only;
     /// prefer `blit` inside a `render` closure when drawing multiple strings.
     fn draw(&self, backend: &mut dyn Backend, x: usize, y: usize, text: &str) {
-        backend.render(&mut |fb, stride| self.blit(fb, stride, x, y, text));
+        backend.render(&mut |fb, stride| { self.blit(fb, stride, x, y, text); });
     }
 
     fn cell_height(&self) -> usize;

@@ -98,7 +98,7 @@ impl TtfAtlas {
 }
 
 impl Renderer for TtfAtlas {
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) {
+    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let ch = self.cell_h;
         let mut cx = x;
         for byte in text.bytes() {
@@ -111,6 +111,7 @@ impl Renderer for TtfAtlas {
                 cx += gw;
             }
         }
+        cx
     }
 
     fn cell_height(&self) -> usize {

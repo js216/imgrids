@@ -925,20 +925,29 @@ e("static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);")
 e("static LAST_DRAWN_FOCUS: Mutex<Option<usize>> = Mutex::new(Some(usize::MAX));")
 e("")
 
--- Collect all progress bar ops globally and assign indices
+-- Collect all progress bar and dynamic label ops globally and assign indices
 local all_prog_ops = {}
+local all_dyn_ops = {}
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
 			all_prog_ops[#all_prog_ops+1] = op
 			op.prog_idx = #all_prog_ops
 		end
+		if op.kind == "dynamic" then
+			all_dyn_ops[#all_dyn_ops+1] = op
+			op.dyn_idx = #all_dyn_ops
+		end
 	end
 end
-if #all_prog_ops > 0 then
+local need_atomics = #all_prog_ops + #all_dyn_ops > 0
+if need_atomics then
 	e("use std::sync::atomic::{AtomicUsize, Ordering};")
 	for i = 1, #all_prog_ops do
 		e("static PROG_%d_PREV: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
+	end
+	for i = 1, #all_dyn_ops do
+		e("static DYN_%d_END: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
 	end
 	e("")
 end
@@ -1010,6 +1019,9 @@ e("        *FOCUSED.lock().unwrap() = None;")
 e("        *LAST_DRAWN_FOCUS.lock().unwrap() = None;")
 for i = 1, #all_prog_ops do
 	e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
+end
+for i = 1, #all_dyn_ops do
+	e("        DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", i)
 end
 e("        match menu {")
 for _, name in ipairs(menu_names) do
@@ -1095,21 +1107,40 @@ end
 
 -- Helper: emit blit code for a single dynamic label (inside render closure)
 local function emit_dyn_blit(op, indent)
+	local ch = cell_height_est(op.atlas.font)
+	local bg = rgb_lit(op.atlas.bg)
+	local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
 	if op.align == "left" then
-		e("%s%s().blit(fb, stride, %d, %d,", indent, op.atlas.fn_name, op.text_x, op.text_y)
-		e('%s    &format!("{:<%d}", val));', indent, op.pad_chars)
+		e("%slet end_x = %s().blit(fb, stride, %d, %d, val);",
+			indent, op.atlas.fn_name, op.text_x, op.text_y)
+		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
+		e("%sif prev != usize::MAX && prev > end_x {", indent)
+		e("%s    for gy in 0..%d_usize {", indent, ch)
+		e("%s        let s = (%d + gy) * stride + end_x;", indent, op.text_y)
+		e("%s        fb[s..s + prev - end_x].fill(%s);", indent, bg)
+		e("%s    }", indent)
+		e("%s}", indent)
 	else
+		-- Center/right: clear full area then blit at computed x
 		e("%slet a = %s();", indent, op.atlas.fn_name)
-		-- Clear old text with spaces
-		e('%sa.blit(fb, stride, %d, %d, &format!("{:<%d}", ""));', indent, op.text_x, op.text_y, op.pad_chars)
-		e("%slet tw = a.text_width(val);", indent)
+		e("%slet prev = %s.load(Ordering::Relaxed);", indent, dyn_end)
+		e("%slet clear_w = if prev == usize::MAX { %d } else { prev.saturating_sub(%d) };",
+			indent, op.inner_w, op.text_x)
+		e("%sfor gy in 0..%d_usize {", indent, ch)
+		e("%s    let s = (%d + gy) * stride + %d;", indent, op.text_y, op.text_x)
+		e("%s    fb[s..s + clear_w].fill(%s);", indent, bg)
+		e("%s}", indent)
 		if op.align == "center" then
-			e("%sa.blit(fb, stride, %d + (%d_usize.saturating_sub(tw)) / 2, %d, val);",
-				indent, op.text_x, op.inner_w, op.text_y)
-		else -- right
-			e("%sa.blit(fb, stride, %d + %d_usize.saturating_sub(tw), %d, val);",
-				indent, op.text_x, op.inner_w, op.text_y)
+			e("%slet tw = a.text_width(val);", indent)
+			e("%slet bx = %d + (%d_usize.saturating_sub(tw)) / 2;",
+				indent, op.text_x, op.inner_w)
+		else
+			e("%slet tw = a.text_width(val);", indent)
+			e("%slet bx = %d + %d_usize.saturating_sub(tw);",
+				indent, op.text_x, op.inner_w)
 		end
+		e("%slet end_x = a.blit(fb, stride, bx, %d, val);", indent, op.text_y)
+		e("%s%s.store(end_x, Ordering::Relaxed);", indent, dyn_end)
 	end
 end
 
