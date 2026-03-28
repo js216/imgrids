@@ -1283,10 +1283,10 @@ end
 for _, name in ipairs(menu_names) do
 	local fops = get_focusable_ops(menu_ops[name])
 	if #fops > 0 then
-		e("fn draw_focus_%s(backend: &mut dyn Backend, focused: Option<usize>) {", name:lower())
+		e("fn draw_focus_%s(backend: &mut dyn Backend, prev: Option<usize>, focused: Option<usize>) {", name:lower())
 		for fi, op in ipairs(fops) do
 			local idx = fi - 1
-			e("    if focused == Some(%d) {", idx)
+			e("    if focused == Some(%d) && prev != Some(%d) {", idx, idx)
 			if op.kind == "progress" then
 				-- Progress bar: just draw border for focus
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
@@ -1304,7 +1304,8 @@ for _, name in ipairs(menu_names) do
 				end
 				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 			end
-			e("    } else {")
+			e("    }")
+			e("    if prev == Some(%d) && focused != Some(%d) {", idx, idx)
 			if op.kind == "progress" then
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
 				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
@@ -1478,9 +1479,25 @@ for _, name in ipairs(menu_names) do
 		e("        let focused = *FOCUSED.lock().unwrap();")
 		e("        let mut last = LAST_DRAWN_FOCUS.lock().unwrap();")
 		e("        if *last != focused {")
+		e("            let prev = *last;")
 		e("            *last = focused;")
 		e("            drop(last);")
-		e("            draw_focus_%s(backend, focused);", name:lower())
+		e("            draw_focus_%s(backend, prev, focused);", name:lower())
+		-- Reset dynamic label tracking for elements that overlap with changed focus
+		-- Only reset labels that are inside a focusable area that changed
+		for _, op in ipairs(dyn_ops) do
+			for fi, fop in ipairs(fops) do
+				local fidx = fi - 1
+				-- Check if dynamic label overlaps with this focusable area
+				if op.x >= fop.x and op.x < fop.x + fop.w
+				   and op.text_y >= fop.y and op.text_y < fop.y + fop.h then
+					e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
+					e("                %s.store(usize::MAX, Ordering::Relaxed);", ("DYN_%d_END"):format(op.dyn_idx))
+					e("            }")
+					break
+				end
+			end
+		end
 		e("        }")
 		e("    }")
 	end
