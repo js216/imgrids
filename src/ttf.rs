@@ -169,13 +169,16 @@ impl TtfAtlas {
 impl Renderer for TtfAtlas {
     fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let ch = self.cell_h;
+        let fb_len = fb.len();
         let mut cx = x;
         for c in text.chars() {
             if let Some((src, gw)) = self.glyph_by_char(c) {
                 for gy in 0..ch {
                     let dst = (y + gy) * stride + cx;
-                    fb[dst..dst + gw]
-                        .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+                    if dst + gw <= fb_len {
+                        fb[dst..dst + gw]
+                            .copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+                    }
                 }
                 cx += gw;
             }

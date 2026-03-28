@@ -239,7 +239,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, lbl=1, render=1, align=1,
+	press=1, focusable=1, lbl=1, render=1, align=1, fmt=1, adjust=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -612,7 +612,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 	else
 		-- Leaf node
-		local lbl, render, press
+		local lbl, render, press, fmt, adjust
 		local text
 
 		if type(node) == "string" then
@@ -621,6 +621,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			lbl = node.lbl
 			render = node.render
 			press = get_press(node)
+			fmt = node.fmt
+			adjust = node.adjust
 			if not lbl and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
@@ -760,6 +762,10 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					fg = s.fg,
 					bg = s.bg,
 					cell_bg = s.bg,
+					adjust = adjust,
+					is_focusable = is_focusable,
+					foc = foc,
+					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
 			else
 				ops[#ops + 1] = {
@@ -771,6 +777,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					text_x = text_x,
 					text_y = text_y,
 					lbl = lbl,
+					fmt = fmt,
 					atlas = atlas,
 					pad_chars = pad_chars,
 					align = align,
@@ -954,14 +961,18 @@ e("")
 for _, a in ipairs(atlases) do
 	if is_raster(a.font) then
 		local name, gw, gh = resolve_raster_font(a.font)
+		e("#[allow(dead_code)]")
 		e("static %s: OnceLock<RasterAtlas> = OnceLock::new();", a.varname)
+		e("#[allow(dead_code)]")
 		e("fn %s() -> &'static RasterAtlas {", a.fn_name)
 		e("    %s.get_or_init(|| RasterAtlas::new(", a.varname)
 		e("        &imgrids::fonts::%s::FONT, %d, %d, %s, %s,", name, gw, gh, rgb_lit(a.fg), rgb_lit(a.bg))
 		e("    ))")
 		e("}")
 	else
+		e("#[allow(dead_code)]")
 		e("static %s: OnceLock<TtfAtlas> = OnceLock::new();", a.varname)
+		e("#[allow(dead_code)]")
 		e("fn %s() -> &'static TtfAtlas {", a.fn_name)
 		-- Build extra codepoints array
 		local extra_str = "&[]"
@@ -1199,7 +1210,7 @@ end
 local function get_focusable_ops(ops)
 	local fops = {}
 	for _, op in ipairs(ops) do
-		if (op.kind == "static" or op.kind == "dynamic") and op.is_focusable then
+		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress") and op.is_focusable then
 			fops[#fops + 1] = op
 		end
 	end
@@ -1211,6 +1222,9 @@ local function emit_dyn_blit(op, indent)
 	local ch = cell_height_est(op.atlas.font)
 	local bg = rgb_lit(op.atlas.bg)
 	local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
+	if op.fmt then
+		e("%slet val = &crate::%s(val);", indent, op.fmt)
+	end
 	if op.align == "left" then
 		e("%slet end_x = backend.blit(%s(), %d, %d, val);",
 			indent, op.atlas.fn_name, op.text_x, op.text_y)
@@ -1273,25 +1287,39 @@ for _, name in ipairs(menu_names) do
 		for fi, op in ipairs(fops) do
 			local idx = fi - 1
 			e("    if focused == Some(%d) {", idx)
-			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
-			if op.kind == "static" then
-				for i, line in ipairs(op.lines) do
-					local y = op.foc.text_y + (i - 1) * op.foc.line_step
-					emit_static_blit("        ", op.foc.atlas.fn_name, op.foc.align,
-						op.foc.text_x, op.foc.inner_w, y, line)
+			if op.kind == "progress" then
+				-- Progress bar: just draw border for focus
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
+				-- Force progress bar redraw
+				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			else
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
+				if op.kind == "static" then
+					for i, line in ipairs(op.lines) do
+						local y = op.foc.text_y + (i - 1) * op.foc.line_step
+						emit_static_blit("        ", op.foc.atlas.fn_name, op.foc.align,
+							op.foc.text_x, op.foc.inner_w, y, line)
+					end
 				end
+				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 			end
-			emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 			e("    } else {")
-			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
-			if op.kind == "static" then
-				for i, line in ipairs(op.lines) do
-					local y = op.text_y + (i - 1) * op.line_step
-					emit_static_blit("        ", op.atlas.fn_name, op.align,
-						op.text_x, op.inner_w, y, line)
+			if op.kind == "progress" then
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
+				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			else
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
+				if op.kind == "static" then
+					for i, line in ipairs(op.lines) do
+						local y = op.text_y + (i - 1) * op.line_step
+						emit_static_blit("        ", op.atlas.fn_name, op.align,
+							op.text_x, op.inner_w, y, line)
+					end
 				end
+				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 			end
-			emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 			e("    }")
 		end
 		e("}")
@@ -1420,7 +1448,13 @@ for _, name in ipairs(menu_names) do
 			local x_filled = op.px > 0 and ("%d + filled"):format(op.px) or "filled"
 			e("        if name == %q {", op.lbl)
 			e("            if let Ok(v) = val.parse::<f32>() {")
-			e("                let v = v.clamp(0.0, 1.0);")
+			if op.adjust then
+				local min = op.adjust[2]
+				local max = op.adjust[3]
+				e("                let v = ((v - %g.0) / (%g.0 - %g.0)).clamp(0.0, 1.0);", min, max, min)
+			else
+				e("                let v = v.clamp(0.0, 1.0);")
+			end
 			e("                let filled = (%d.0_f32 * v) as usize;", op.pw)
 			e("                let prev = PROG_%d_PREV.swap(filled, Ordering::Relaxed);", op.prog_idx)
 			e("                if filled != prev {")
@@ -1451,6 +1485,63 @@ for _, name in ipairs(menu_names) do
 		e("    }")
 	end
 
+	e("}")
+	e("")
+end
+
+-- emit FMT_PARAMS: params that have per-label fmt (skip in format_values)
+do
+	local fmt_params = {}
+	for _, name in ipairs(menu_names) do
+		for _, op in ipairs(menu_ops[name]) do
+			if op.kind == "dynamic" and op.fmt and op.lbl then
+				fmt_params[op.lbl] = true
+			end
+		end
+	end
+	local sorted = {}
+	for k in pairs(fmt_params) do sorted[#sorted+1] = k end
+	table.sort(sorted)
+	e("#[allow(dead_code)]")
+	e("pub const FMT_PARAMS: &[&str] = &[%s];",
+		table.concat(
+			(function() local t = {} for _, v in ipairs(sorted) do t[#t+1] = ("%q"):format(v) end return t end)(),
+			", "))
+	e("")
+end
+
+-- emit focused_adjust(): returns (param_name, min, max) for adjustable focused element
+do
+	local adjustables = {}
+	for _, name in ipairs(menu_names) do
+		local fops = get_focusable_ops(menu_ops[name])
+		for fi, op in ipairs(fops) do
+			if op.adjust then
+				adjustables[#adjustables+1] = {
+					menu = name,
+					focus_idx = fi - 1,
+					param = op.adjust[1],
+					min = op.adjust[2],
+					max = op.adjust[3],
+				}
+			end
+		end
+	end
+	e("#[allow(dead_code)]")
+	e("pub fn focused_adjust() -> Option<(&'static str, f64, f64)> {")
+	if #adjustables > 0 then
+		e("    let menu = CURRENT_MENU.lock().unwrap();")
+		e("    let focused = *FOCUSED.lock().unwrap();")
+		e("    match (*menu, focused) {")
+		for _, a in ipairs(adjustables) do
+			e("        (Some(Menu::%s), Some(%d)) => Some((%q, %g.0, %g.0)),",
+				a.menu, a.focus_idx, a.param, a.min, a.max)
+		end
+		e("        _ => None,")
+		e("    }")
+	else
+		e("    None")
+	end
 	e("}")
 	e("")
 end
