@@ -104,6 +104,20 @@ pub trait Backend {
 
     fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize;
 
+    /// Blit text clipped to a maximum x coordinate.
+    fn blit_clipped(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str, max_x: usize) -> usize {
+        // Find how many chars fit within max_x
+        let mut w = 0;
+        let mut end = 0;
+        for (i, c) in text.char_indices() {
+            let cw = atlas.char_width(c);
+            if x + w + cw > max_x { break; }
+            w += cw;
+            end = i + c.len_utf8();
+        }
+        self.blit(atlas, x, y, &text[..end])
+    }
+
     /// Drains pending input events into an internal buffer and returns them.
     fn poll_events(&mut self) -> &[InputEvent] {
         &[]
@@ -132,6 +146,9 @@ impl Backend for Box<dyn Backend> {
     }
     fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize {
         (**self).blit(atlas, x, y, text)
+    }
+    fn blit_clipped(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str, max_x: usize) -> usize {
+        (**self).blit_clipped(atlas, x, y, text, max_x)
     }
     fn poll_events(&mut self) -> &[InputEvent] {
         (**self).poll_events()

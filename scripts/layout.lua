@@ -1250,8 +1250,8 @@ local function emit_dyn_blit(op, indent)
 		e("%slet val = &crate::%s(val);", indent, op.fmt)
 	end
 	if op.align == "left" then
-		e("%slet end_x = backend.blit(%s(), %d, %d, val);",
-			indent, op.atlas.fn_name, op.text_x, op.text_y)
+		e("%slet end_x = backend.blit_clipped(%s(), %d, %d, val, %d);",
+			indent, op.atlas.fn_name, op.text_x, op.text_y, op.x + op.w)
 		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
 		e("%sif prev != usize::MAX && prev > end_x {", indent)
 		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
@@ -1632,6 +1632,14 @@ do
 	e("")
 	e("pub fn clear_focused() {")
 	e("    *FOCUSED.lock().unwrap() = None;")
+	e("}")
+	e("")
+	e("pub fn get_focused() -> Option<usize> {")
+	e("    *FOCUSED.lock().unwrap()")
+	e("}")
+	e("")
+	e("pub fn set_focused_raw(idx: Option<usize>) {")
+	e("    *FOCUSED.lock().unwrap() = idx;")
 	e("}")
 	e("")
 end
