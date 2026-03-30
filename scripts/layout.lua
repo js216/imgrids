@@ -239,7 +239,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, lbl=1, render=1, align=1, fmt=1, adjust=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -646,7 +646,10 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 
 		-- Focusable flag: explicit override, or default to having a press handler
 		local is_focusable
-		if type(node) == "table" and node.focusable ~= nil then
+		local focus_index = type(node) == "table" and node.focus_index or nil
+		if focus_index ~= nil then
+			is_focusable = true
+		elseif type(node) == "table" and node.focusable ~= nil then
 			is_focusable = node.focusable
 		else
 			is_focusable = (press ~= nil)
@@ -694,6 +697,9 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		local foc = nil
 		if is_focusable then
 			local fs = merge_style(s, focused_ovr)
+			if type(node) == "table" and node.focused then
+				fs = merge_style(fs, node.focused)
+			end
 			local fch_px = cell_height_est(fs.font)
 			local fcw_px = char_width_est(fs.font)
 			local fbx = border_inset(fs, "left") + eff_pad(fs, "left")
@@ -764,6 +770,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					cell_bg = s.bg,
 					adjust = adjust,
 					is_focusable = is_focusable,
+					focus_index = focus_index,
 					foc = foc,
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
@@ -784,6 +791,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					inner_w = inner_w,
 					press = press,
 					is_focusable = is_focusable,
+					focus_index = focus_index,
 					foc = foc,
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
@@ -805,6 +813,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				atlas = atlas,
 				press = press,
 				is_focusable = is_focusable,
+				focus_index = focus_index,
 				foc = foc,
 				normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 			}
@@ -1206,15 +1215,33 @@ for _, name in ipairs(menu_names) do
 	e("")
 end
 
--- Helper: collect focusable (static/dynamic, is_focusable=true) ops in order
+-- Helper: collect focusable ops, assign focus indices.
+-- Explicit focus_index values are respected; others are auto-assigned.
+-- Multiple ops with the same explicit focus_index form a focus group.
 local function get_focusable_ops(ops)
-	local fops = {}
+	local raw = {}
 	for _, op in ipairs(ops) do
 		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress") and op.is_focusable then
-			fops[#fops + 1] = op
+			raw[#raw + 1] = op
 		end
 	end
-	return fops
+	-- Collect explicitly assigned indices
+	local explicit = {}
+	for _, op in ipairs(raw) do
+		if op.focus_index then explicit[op.focus_index] = true end
+	end
+	-- Auto-assign indices to ops without explicit focus_index
+	local next_auto = 0
+	for _, op in ipairs(raw) do
+		if not op.focus_index then
+			while explicit[next_auto] do next_auto = next_auto + 1 end
+			op.focus_index = next_auto
+			next_auto = next_auto + 1
+		end
+	end
+	-- Sort by focus_index so draw order is deterministic
+	table.sort(raw, function(a, b) return a.focus_index < b.focus_index end)
+	return raw
 end
 
 -- Helper: emit blit code for a single dynamic label
@@ -1261,14 +1288,17 @@ local function emit_border(indent, op_x, op_y, op_w, op_h, b)
 	local i = indent
 	if b.side then
 		local x2, y2, w2, h2, t, c = op_x, op_y, op_w, op_h, b.width, rgb_lit(b.color)
-		if b.side == "top" then
-			e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2, w2, t, c)
-		elseif b.side == "bottom" then
-			e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2 + h2 - t, w2, t, c)
-		elseif b.side == "left" then
-			e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2, t, h2, c)
-		elseif b.side == "right" then
-			e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2 + w2 - t, y2, t, h2, c)
+		local sides = type(b.side) == "table" and b.side or {b.side}
+		for _, s in ipairs(sides) do
+			if s == "top" then
+				e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2, w2, t, c)
+			elseif s == "bottom" then
+				e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2 + h2 - t, w2, t, c)
+			elseif s == "left" then
+				e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2, y2, t, h2, c)
+			elseif s == "right" then
+				e("%sbackend.fill_rect(%d, %d, %d, %d, %s);", i, x2 + w2 - t, y2, t, h2, c)
+			end
 		end
 	else
 		local t, c = b.width, rgb_lit(b.color)
@@ -1285,7 +1315,7 @@ for _, name in ipairs(menu_names) do
 	if #fops > 0 then
 		e("fn draw_focus_%s(backend: &mut dyn Backend, prev: Option<usize>, focused: Option<usize>) {", name:lower())
 		for fi, op in ipairs(fops) do
-			local idx = fi - 1
+			local idx = op.focus_index
 			e("    if focused == Some(%d) && prev != Some(%d) {", idx, idx)
 			if op.kind == "progress" then
 				-- Progress bar: just draw border for focus
@@ -1355,20 +1385,37 @@ for _, name in ipairs(menu_names) do
 				local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
 				local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
 				e(
-					"            *FOCUSED.lock().unwrap() = if %s*x < %d && %s*y < %d { Some(0) } else { None };",
+					"            *FOCUSED.lock().unwrap() = if %s*x < %d && %s*y < %d { Some(%d) } else { None };",
 					x_lo,
 					op.x + op.w,
 					y_lo,
-					op.y + op.h
+					op.y + op.h,
+					op.focus_index
 				)
 			else
+				-- Group ops by focus_index, compute bounding box per group
+				local groups = {}
+				local group_order = {}
+				for _, op in ipairs(fops) do
+					local idx = op.focus_index
+					if not groups[idx] then
+						groups[idx] = { x = op.x, y = op.y, x2 = op.x + op.w, y2 = op.y + op.h }
+						group_order[#group_order + 1] = idx
+					else
+						local g = groups[idx]
+						g.x  = math.min(g.x, op.x)
+						g.y  = math.min(g.y, op.y)
+						g.x2 = math.max(g.x2, op.x + op.w)
+						g.y2 = math.max(g.y2, op.y + op.h)
+					end
+				end
 				e("            let new_focus =")
-				for fi, op in ipairs(fops) do
-					local idx = fi - 1
-					local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
-					local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
-					local prefix = fi == 1 and "                if " or "                else if "
-					e("%s%s*x < %d && %s*y < %d { Some(%d) }", prefix, x_lo, op.x + op.w, y_lo, op.y + op.h, idx)
+				for gi, idx in ipairs(group_order) do
+					local g = groups[idx]
+					local x_lo = g.x > 0 and ("*x >= %d && "):format(g.x) or ""
+					local y_lo = g.y > 0 and ("*y >= %d && "):format(g.y) or ""
+					local prefix = gi == 1 and "                if " or "                else if "
+					e("%s%s*x < %d && %s*y < %d { Some(%d) }", prefix, x_lo, g.x2, y_lo, g.y2, idx)
 				end
 				e("                else { None };")
 				e("            *FOCUSED.lock().unwrap() = new_focus;")
@@ -1487,7 +1534,7 @@ for _, name in ipairs(menu_names) do
 		-- Only reset labels that are inside a focusable area that changed
 		for _, op in ipairs(dyn_ops) do
 			for fi, fop in ipairs(fops) do
-				local fidx = fi - 1
+				local fidx = fop.focus_index
 				-- Check if dynamic label overlaps with this focusable area
 				if op.x >= fop.x and op.x < fop.x + fop.w
 				   and op.text_y >= fop.y and op.text_y < fop.y + fop.h then
@@ -1536,7 +1583,7 @@ do
 			if op.adjust then
 				adjustables[#adjustables+1] = {
 					menu = name,
-					focus_idx = fi - 1,
+					focus_idx = op.focus_index,
 					param = op.adjust[1],
 					min = op.adjust[2],
 					max = op.adjust[3],
@@ -1559,6 +1606,39 @@ do
 	else
 		e("    None")
 	end
+	e("}")
+	e("")
+end
+
+-- emit set_focused(): set focus by label name for the current menu
+do
+	-- Collect all focusable ops across menus with their labels
+	local entries = {}
+	for _, name in ipairs(menu_names) do
+		local fops = get_focusable_ops(menu_ops[name])
+		for fi, op in ipairs(fops) do
+			if op.lbl then
+				entries[#entries+1] = { menu = name, idx = op.focus_index, lbl = op.lbl }
+			end
+		end
+	end
+	e("#[allow(dead_code)]")
+	e("pub fn set_focused(label: &str) {")
+	if #entries > 0 then
+		e("    let menu = *CURRENT_MENU.lock().unwrap();")
+		e("    let idx = match (menu, label) {")
+		for _, ent in ipairs(entries) do
+			e("        (Some(Menu::%s), %q) => Some(%d),", ent.menu, ent.lbl, ent.idx)
+		end
+		e("        _ => None,")
+		e("    };")
+		e("    *FOCUSED.lock().unwrap() = idx;")
+	end
+	e("}")
+	e("")
+	e("#[allow(dead_code)]")
+	e("pub fn clear_focused() {")
+	e("    *FOCUSED.lock().unwrap() = None;")
 	e("}")
 	e("")
 end

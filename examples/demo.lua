@@ -398,9 +398,9 @@ menus = {
    },
 
    FontIcons = {"col",
-      {"[25/26] Font Chain + Icons + Extra",                        size = 40, style = s_title},
+      {"[25/27] Font Chain + Icons + Extra",                        size = 40, style = s_title},
       {"Font chain: primary + FA fallback +\nextra code points (" .. PLUS_MINUS .. " " .. MICRO .. " " .. DEGREE .. ").", size = 50, style = s_desc},
-      nav("DynAlign", "Popup"),
+      nav("DynAlign", "FocusGroups"),
       {"row", leaf_style = {font = fonts.myriad_icons_extra},
          {SYMBOL_HOME .. " Home"},
          {SYMBOL_SETTINGS .. " Settings"},
@@ -423,8 +423,24 @@ menus = {
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
       border = {width = 2, color = colors.white},
-      {"[26/26] Popup Positioning",                                 size = 40, style = s_title},
+      {"[27/27] Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("FontIcons", "Hello"),
+      nav("FocusGroups", "Hello"),
    },
+}
+
+-- Insert FocusGroups before Popup in navigation
+menus.FocusGroups = {"col",
+   {"[26/27] Focus Groups",                                       size = 40, style = s_title},
+   {"focus_index= groups elements into\na single focusable unit.", size = 50, style = s_desc},
+   nav("FontIcons", "Popup"),
+   {"row",
+      {"Label", focus_index = 50,
+       focused = {border = {width = 3, color = colors.green, side = {"top", "bottom", "left"}}},
+       style = {margin = 0, margin_left = 4}},
+      {lbl = "parameter One", render = "progress bar", focus_index = 50,
+       focused = {border = {width = 3, color = colors.green, side = {"top", "bottom", "right"}}},
+       style = {pad = 10, margin = 0, margin_right = 4, fg = colors.green}},
+   },
+   {"Click either Label or the bar.\nBoth highlight as one unit.", style = {border = {width = 0}}},
 }
