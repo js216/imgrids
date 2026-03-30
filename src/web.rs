@@ -133,7 +133,6 @@ pub fn run(
             tick_fn(&mut *backend);
         }));
     });
-    // fps=30 matches the native sleep(33) rate; uses requestAnimationFrame
-    // internally — no Asyncify overhead per frame.
-    unsafe { emscripten_set_main_loop(main_loop_trampoline, 30, 1); }
+    // fps=60; uses requestAnimationFrame internally.
+    unsafe { emscripten_set_main_loop(main_loop_trampoline, 60, 1); }
 }

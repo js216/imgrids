@@ -1159,11 +1159,11 @@ e("")
 local function emit_static_blit(indent, atlas_fn, align, text_x, inner_w, y, line)
 	if align == "center" then
 		e("%s{ let tw = %s().text_width(%q);", indent, atlas_fn, line)
-		e("%s  backend.blit(%s(), %d + (%d - tw) / 2, %d, %q); }",
+		e("%s  backend.blit(%s(), %d + %d_usize.saturating_sub(tw) / 2, %d, %q); }",
 			indent, atlas_fn, text_x, inner_w, y, line)
 	elseif align == "right" then
 		e("%s{ let tw = %s().text_width(%q);", indent, atlas_fn, line)
-		e("%s  backend.blit(%s(), %d + %d - tw, %d, %q); }",
+		e("%s  backend.blit(%s(), %d + %d_usize.saturating_sub(tw), %d, %q); }",
 			indent, atlas_fn, text_x, inner_w, y, line)
 	else
 		e("%sbackend.blit(%s(), %d, %d, %q);", indent, atlas_fn, text_x, y, line)
