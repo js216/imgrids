@@ -1312,13 +1312,13 @@ local function emit_dyn_blit(op, indent)
 	end
 	if op.align == "left" then
 		e("%slet end_x = backend.blit_clipped(%s(), %d, %d, val, %d);",
-			indent, op.atlas.fn_name, op.text_x, op.text_y, op.x + op.w)
+			indent, op.atlas.fn_name, op.text_x, op.text_y, op.text_x + op.inner_w)
 		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
 		e("%sif prev != usize::MAX && prev > end_x {", indent)
 		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
 		e("%s}", indent)
 	else
-		-- Center/right: clear full area then blit at computed x
+		-- Center/right: clear old area then blit at computed x
 		e("%slet a = %s();", indent, op.atlas.fn_name)
 		e("%slet prev = %s.load(Ordering::Relaxed);", indent, dyn_end)
 		e("%slet clear_w = if prev == usize::MAX { %d } else { prev.saturating_sub(%d) };",
@@ -1333,7 +1333,7 @@ local function emit_dyn_blit(op, indent)
 			e("%slet bx = %d + %d_usize.saturating_sub(tw);",
 				indent, op.text_x, op.inner_w)
 		end
-		e("%slet end_x = backend.blit_clipped(a, bx, %d, val, %d);", indent, op.text_y, op.x + op.w)
+		e("%slet end_x = backend.blit(a, bx, %d, val);", indent, op.text_y)
 		e("%s%s.store(end_x, Ordering::Relaxed);", indent, dyn_end)
 	end
 end

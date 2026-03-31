@@ -74,6 +74,10 @@ impl TtfAtlas {
                 codepoints.push(cp);
             }
         }
+        // Add common ligature codepoints
+        for &cp in &[0xFB00u32, 0xFB01, 0xFB02, 0xFB03, 0xFB04] {
+            if !codepoints.contains(&cp) { codepoints.push(cp); }
+        }
         for font in fonts {
             // Scan Private Use Area (FontAwesome range) and other useful ranges
             for cp in 0xF000u32..0xFA00 {
@@ -89,22 +93,33 @@ impl TtfAtlas {
         // Pre-compute advances: for each code point, find the first font with a glyph
         struct GlyphInfo {
             cp: u32,
+            render_cp: u32, // may differ if using a fallback glyph
             font_idx: usize,
             adv: usize,
         }
+        // Fallback map: Unicode → ASCII equivalent for missing glyphs
+        let fallbacks: &[(u32, u32)] = &[
+            (0x2212, 0x002D), // − → -
+            (0x00B7, 0x002E), // · → .
+        ];
         let mut glyphs: Vec<GlyphInfo> = Vec::new();
         for &cp in &codepoints {
-            if let Some(c) = char::from_u32(cp) {
-                for (fi, font) in fonts.iter().enumerate() {
-                    let scale = compute_scale(font, cell_h);
-                    let sf = font.as_scaled(scale);
-                    let id = font.glyph_id(c);
-                    // Skip .notdef (id 0) — means the font doesn't have this character
-                    if id.0 == 0 { continue; }
-                    let a = sf.h_advance(id).ceil() as usize;
-                    if a > 0 {
-                        glyphs.push(GlyphInfo { cp, font_idx: fi, adv: a });
-                        break;
+            let candidates = [cp, fallbacks.iter().find(|&&(from, _)| from == cp).map(|&(_, to)| to).unwrap_or(cp)];
+            let mut found = false;
+            for &try_cp in &candidates {
+                if found { break; }
+                if let Some(c) = char::from_u32(try_cp) {
+                    for (fi, font) in fonts.iter().enumerate() {
+                        let scale = compute_scale(font, cell_h);
+                        let sf = font.as_scaled(scale);
+                        let id = font.glyph_id(c);
+                        if id.0 == 0 { continue; }
+                        let a = sf.h_advance(id).ceil() as usize;
+                        if a > 0 {
+                            glyphs.push(GlyphInfo { cp, render_cp: try_cp, font_idx: fi, adv: a });
+                            found = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -122,7 +137,7 @@ impl TtfAtlas {
             let font = &fonts[g.font_idx];
             let scale = compute_scale(font, cell_h);
             let sf = font.as_scaled(scale);
-            let c = char::from_u32(g.cp).unwrap();
+            let c = char::from_u32(g.render_cp).unwrap();
             let gw = g.adv;
 
             if g.cp < 128 {
@@ -166,12 +181,35 @@ impl TtfAtlas {
     }
 }
 
+impl TtfAtlas {
+    fn try_ligature(chars: &[char], i: usize, atlas: &Self) -> (char, usize) {
+        if chars[i] == 'f' {
+            if i + 2 < chars.len() && chars[i+1] == 'f' && chars[i+2] == 'i'
+                && atlas.glyph_by_char('\u{FB03}').is_some() { return ('\u{FB03}', 3); }
+            if i + 2 < chars.len() && chars[i+1] == 'f' && chars[i+2] == 'l'
+                && atlas.glyph_by_char('\u{FB04}').is_some() { return ('\u{FB04}', 3); }
+            if i + 1 < chars.len() && chars[i+1] == 'i'
+                && atlas.glyph_by_char('\u{FB01}').is_some() { return ('\u{FB01}', 2); }
+            if i + 1 < chars.len() && chars[i+1] == 'l'
+                && atlas.glyph_by_char('\u{FB02}').is_some() { return ('\u{FB02}', 2); }
+            if i + 1 < chars.len() && chars[i+1] == 'f'
+                && atlas.glyph_by_char('\u{FB00}').is_some() { return ('\u{FB00}', 2); }
+        }
+        (chars[i], 1)
+    }
+}
+
 impl Renderer for TtfAtlas {
     fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let ch = self.cell_h;
         let fb_len = fb.len();
         let mut cx = x;
-        for c in text.chars() {
+        let chars: Vec<char> = text.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            let (c, skip) = Self::try_ligature(&chars, i, self);
+            if skip > 1 { cx = cx.saturating_sub(3); } // tighten ligature kerning
+            i += skip;
             if let Some((src, gw)) = self.glyph_by_char(c) {
                 for gy in 0..ch {
                     let dst = (y + gy) * stride + cx;
@@ -198,9 +236,20 @@ impl Renderer for TtfAtlas {
         }
     }
     fn text_width(&self, text: &str) -> usize {
-        text.chars().map(|c| self.char_width(c)).sum()
+        let chars: Vec<char> = text.chars().collect();
+        let mut w = 0;
+        let mut i = 0;
+        while i < chars.len() {
+            let (c, skip) = Self::try_ligature(&chars, i, self);
+            w += self.char_width(c);
+            // Ligature kerning adjustment must match blit
+            if skip > 1 { w = w.saturating_sub(3); }
+            i += skip;
+        }
+        w
     }
 }
+
 
 // --- Helpers -----------------------------------------------------------------
 

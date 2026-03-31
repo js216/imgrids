@@ -229,6 +229,7 @@ impl Backend for Framebuf {
         atlas.blit(pixels, stride, x, y, text)
     }
 
+
     fn poll_events(&mut self) -> &[InputEvent] {
         self.events.clear();
         let fd = match self.input_fd {
