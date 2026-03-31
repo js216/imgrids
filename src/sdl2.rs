@@ -108,6 +108,11 @@ impl Backend for Sdl2Backend {
         end_x
     }
 
+    fn blit_alpha(&mut self, icon: &crate::Icon, fg: Pixel, bg: Pixel) {
+        crate::blit_alpha_buf(&mut self.pixels, self.width, icon, fg, bg);
+        self.mark_dirty(icon.x, icon.y, icon.x + icon.w, icon.y + icon.h);
+    }
+
     fn flush(&mut self) {
         let x0 = self.dirty_x0;
         let y0 = self.dirty_y0;

@@ -91,6 +91,65 @@ pub mod ttf;
 // Backends
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Alpha-blend an icon into a pixel buffer.
+/// `alpha` is `iw * ih` bytes (row-major, 0=bg, 255=fg).
+/// The icon is placed at `(x, y)` in the buffer with stride `stride`.
+/// Pre-rendered icon alpha mask for `blit_alpha`.
+pub struct Icon {
+    pub x: usize,
+    pub y: usize,
+    pub w: usize,
+    pub h: usize,
+    pub alpha: &'static [u8],
+}
+
+/// Alpha-blend an icon into a pixel buffer.
+pub fn blit_alpha_buf(buf: &mut [Pixel], stride: usize, icon: &Icon, fg: Pixel, bg: Pixel) {
+    let (fr, fg_, fb) = pixel_to_rgb(fg);
+    let (br, bg_, bb) = pixel_to_rgb(bg);
+    let alpha_len = icon.alpha.len();
+    for row in 0..icon.h {
+        let py = icon.y + row;
+        if py >= buf.len() / stride { break; }
+        let base = py * stride + icon.x;
+        for col in 0..icon.w {
+            let ai = row * icon.w + col;
+            if ai >= alpha_len { break; }
+            let a = icon.alpha[ai] as u32;
+            let r = (fr * a + br * (255 - a)) / 255;
+            let g = (fg_ * a + bg_ * (255 - a)) / 255;
+            let b = (fb * a + bb * (255 - a)) / 255;
+            buf[base + col] = rgb_to_pixel(r, g, b);
+        }
+    }
+}
+
+#[cfg(feature = "bpp16")]
+fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
+    (((p as u32 >> 11) & 0x1F) << 3, ((p as u32 >> 5) & 0x3F) << 2, (p as u32 & 0x1F) << 3)
+}
+#[cfg(feature = "bpp32")]
+fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
+    ((p as u32 >> 16) & 0xFF, (p as u32 >> 8) & 0xFF, p as u32 & 0xFF)
+}
+#[cfg(feature = "bpp32rgba")]
+fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
+    (p as u32 & 0xFF, (p as u32 >> 8) & 0xFF, (p as u32 >> 16) & 0xFF)
+}
+
+#[cfg(feature = "bpp16")]
+fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
+}
+#[cfg(feature = "bpp32")]
+fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    ((r << 16) | (g << 8) | b) as Pixel
+}
+#[cfg(feature = "bpp32rgba")]
+fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
+    (r | (g << 8) | (b << 16) | 0xFF000000) as Pixel
+}
+
 pub trait Backend {
     fn clear(&mut self, color: Pixel);
     fn fill_rect(
@@ -103,6 +162,9 @@ pub trait Backend {
     );
 
     fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize;
+
+    /// Blit an alpha-mask icon.
+    fn blit_alpha(&mut self, icon: &Icon, fg: Pixel, bg: Pixel);
 
     /// Blit text clipped to a maximum x coordinate.
     fn blit_clipped(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str, max_x: usize) -> usize {
@@ -155,6 +217,9 @@ impl Backend for Box<dyn Backend> {
     }
     fn flush(&mut self) {
         (**self).flush()
+    }
+    fn blit_alpha(&mut self, icon: &Icon, fg: Pixel, bg: Pixel) {
+        (**self).blit_alpha(icon, fg, bg)
     }
 }
 

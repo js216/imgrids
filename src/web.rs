@@ -54,6 +54,11 @@ impl Backend for WebBackend {
         end_x
     }
 
+    fn blit_alpha(&mut self, icon: &crate::Icon, fg: Pixel, bg: Pixel) {
+        crate::blit_alpha_buf(&mut self.pixels, self.width, icon, fg, bg);
+        self.dirty = true;
+    }
+
     fn flush(&mut self) {
         if !self.dirty { return; }
         self.dirty = false;

@@ -230,6 +230,12 @@ impl Backend for Framebuf {
     }
 
 
+    fn blit_alpha(&mut self, icon: &crate::Icon, fg: Pixel, bg: Pixel) {
+        let stride = self.stride;
+        let pixels = self.pixels_mut();
+        crate::blit_alpha_buf(pixels, stride, icon, fg, bg);
+    }
+
     fn poll_events(&mut self) -> &[InputEvent] {
         self.events.clear();
         let fd = match self.input_fd {

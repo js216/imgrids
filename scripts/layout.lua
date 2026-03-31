@@ -239,7 +239,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -635,6 +635,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		-- Leaf node
 		local lbl, render, press, fmt, adjust, overload, active_style, active_id
 		local text
+		local icon_path
 
 		if type(node) == "string" then
 			text = node
@@ -647,7 +648,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			overload = node.overload
 			active_style = node.active
 			active_id = node.active_id
-			if not lbl and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
+			icon_path = node.icon
+			if not lbl and not icon_path and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
 		end
@@ -787,7 +789,66 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			end
 		end
 
-		if lbl then
+		if icon_path then
+			-- icon_path is an SVG file; render to .alpha at the target height
+			local target_h = h - bh
+			if target_h < 1 then target_h = 1 end
+			local svg_base = icon_path:match("(.+)%.svg$")
+			if not svg_base then
+				io.stderr:write(("ERROR: icon must be an .svg file: %s\n"):format(icon_path))
+				os.exit(1)
+			end
+			local alpha_path = svg_base .. "_" .. target_h .. ".alpha"
+			-- Render if .alpha is missing or older than .svg
+			local need_render = true
+			local af = io.open(alpha_path, "rb")
+			if af then
+				af:close()
+				-- Check mtimes: re-render if svg is newer
+				local svg_attr = io.popen("stat -c %Y " .. icon_path):read("*a")
+				local alpha_attr = io.popen("stat -c %Y " .. alpha_path):read("*a")
+				if svg_attr and alpha_attr and tonumber(alpha_attr) >= tonumber(svg_attr) then
+					need_render = false
+				end
+			end
+			if need_render then
+				local script_dir = debug.getinfo(1, "S").source:match("@?(.*/)")
+				local cmd = ("python3 %srender_icon.py %s %d %s 1>&2"):format(
+					script_dir, icon_path, target_h, alpha_path)
+				local ok = os.execute(cmd)
+				if not ok then
+					io.stderr:write(("ERROR: failed to render icon: %s\n"):format(icon_path))
+					os.exit(1)
+				end
+			end
+			-- Read .alpha file: 4-byte header (u16 LE width, u16 LE height) + raw alpha
+			local f = io.open(alpha_path, "rb")
+			if not f then
+				io.stderr:write(("ERROR: icon alpha file not found: %s\n"):format(alpha_path))
+				os.exit(1)
+			end
+			local hdr = f:read(4)
+			local iw = hdr:byte(1) + hdr:byte(2) * 256
+			local ih = hdr:byte(3) + hdr:byte(4) * 256
+			f:close()
+			-- Center icon in cell
+			local ix = x + bx + math.floor((inner_w - iw) / 2)
+			local iy = y + by + math.floor(((h - bh) - ih) / 2)
+			-- Resolve absolute path for include_bytes!
+			local abs_path = io.popen("realpath " .. alpha_path):read("*l")
+			ops[#ops + 1] = {
+				kind = "icon",
+				x = x, y = y, w = w, h = h,
+				ix = ix, iy = iy, iw = iw, ih = ih,
+				abs_icon_path = abs_path,
+				fg = s.fg, bg = s.bg,
+				press = press,
+				is_focusable = is_focusable,
+				focus_index = focus_index,
+				foc = foc,
+				normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
+			}
+		elseif lbl then
 			if render == "progress bar" then
 				-- For progress bars, use the max of normal and focused border
 				-- so the fill area never overwrites the focused border
@@ -1039,7 +1100,18 @@ for _, ops in pairs(menu_ops) do
 	end
 end
 
-e("use imgrids::{rgb, Backend, InputEvent%s};", need_renderer and ", Renderer" or "")
+-- Check if any menu uses icons
+local need_icon = false
+for _, name in ipairs(menu_names) do
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "icon" then need_icon = true; break end
+	end
+	if need_icon then break end
+end
+local extra_imports = ""
+if need_renderer then extra_imports = extra_imports .. ", Renderer" end
+if need_icon then extra_imports = extra_imports .. ", Icon" end
+e("use imgrids::{rgb, Backend, InputEvent%s};", extra_imports)
 if need_raster then
 	e("use imgrids::raster::RasterAtlas;")
 end
@@ -1308,7 +1380,11 @@ for _, name in ipairs(menu_names) do
 	e("fn draw_%s(backend: &mut dyn Backend) {", name:lower())
 	e("    backend.fill_rect(0, 0, %d, %d, %s);", screen.width, screen.height, rgb_lit(default_style.bg))
 	for _, op in ipairs(menu_ops[name]) do
-		if op.kind == "static" then
+		if op.kind == "icon" then
+			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+			e("    backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+				op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.bg))
+		elseif op.kind == "static" then
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 			for i, line in ipairs(op.lines) do
 				local y = op.text_y + (i - 1) * op.line_step
