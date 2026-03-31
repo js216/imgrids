@@ -1272,7 +1272,7 @@ local function emit_dyn_blit(op, indent)
 			e("%slet bx = %d + %d_usize.saturating_sub(tw);",
 				indent, op.text_x, op.inner_w)
 		end
-		e("%slet end_x = backend.blit(a, bx, %d, val);", indent, op.text_y)
+		e("%slet end_x = backend.blit_clipped(a, bx, %d, val, %d);", indent, op.text_y, op.x + op.w)
 		e("%s%s.store(end_x, Ordering::Relaxed);", indent, dyn_end)
 	end
 end
