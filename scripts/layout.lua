@@ -239,7 +239,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -621,7 +621,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 	else
 		-- Leaf node
-		local lbl, render, press, fmt, adjust, overload
+		local lbl, render, press, fmt, adjust, overload, active_style, active_id
 		local text
 
 		if type(node) == "string" then
@@ -633,6 +633,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			fmt = node.fmt
 			adjust = node.adjust
 			overload = node.overload
+			active_style = node.active
+			active_id = node.active_id
 			if not lbl and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
@@ -852,6 +854,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				focus_index = focus_index,
 				foc = foc,
 				normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
+				active_style = active_style,
+				active_id = active_id or (active_style and text),
 			}
 		end
 
@@ -970,6 +974,15 @@ e("// transpiler: %s", transpiler_hash)
 e("// input:      %s", input_hash)
 e("")
 
+-- Pre-create active atlases (must happen before atlas emission)
+for _, name in ipairs(menu_names) do
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "static" and op.active_style and op.active_style.bg then
+			op.active_atlas = get_atlas(op.atlas.font, op.atlas.fg, op.active_style.bg)
+		end
+	end
+end
+
 -- Imports
 local need_raster = false
 local need_ttf = false
@@ -1061,15 +1074,20 @@ end
 e("}")
 e("")
 
--- CURRENT_MENU, FOCUSED, and LAST_DRAWN_FOCUS statics
+-- CURRENT_MENU, FOCUSED, LAST_DRAWN_FOCUS, and ACTIVE statics
 e("static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);")
 e("static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);")
 e("static LAST_DRAWN_FOCUS: Mutex<Option<usize>> = Mutex::new(Some(usize::MAX));")
+e("use std::collections::HashSet;")
+e("use std::sync::LazyLock;")
+e("static ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
+e("static LAST_DRAWN_ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
 e("")
 
 -- Collect all progress bar and dynamic label ops globally and assign indices
 local all_prog_ops = {}
 local all_dyn_ops = {}
+local all_active_ops = {}
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
@@ -1079,6 +1097,11 @@ for _, name in ipairs(menu_names) do
 		if op.kind == "dynamic" then
 			all_dyn_ops[#all_dyn_ops+1] = op
 			op.dyn_idx = #all_dyn_ops
+		end
+		if op.kind == "static" and op.active_style then
+			all_active_ops[#all_active_ops+1] = op
+			op.active_idx = #all_active_ops
+			op.active_menu = name
 		end
 	end
 end
@@ -1159,6 +1182,8 @@ e("        *current = Some(menu);")
 e("        drop(current);")
 e("        *FOCUSED.lock().unwrap() = None;")
 e("        *LAST_DRAWN_FOCUS.lock().unwrap() = None;")
+e("        ACTIVE.lock().unwrap().clear();")
+e("        LAST_DRAWN_ACTIVE.lock().unwrap().clear();")
 for i = 1, #all_prog_ops do
 	e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
 end
@@ -1596,6 +1621,48 @@ for _, name in ipairs(menu_names) do
 		e("    }")
 	end
 
+	-- Active state redraw for static nodes
+	local menu_active_ops = {}
+	for _, op in ipairs(all_active_ops) do
+		if op.active_menu == name then
+			menu_active_ops[#menu_active_ops+1] = op
+		end
+	end
+	if #menu_active_ops > 0 then
+		e("    {")
+		e("        let active = ACTIVE.lock().unwrap().clone();")
+		e("        let mut last = LAST_DRAWN_ACTIVE.lock().unwrap();")
+		e("        if active != *last {")
+		e("            *last = active.clone();")
+		e("            drop(last);")
+		for _, op in ipairs(menu_active_ops) do
+			local bg = rgb_lit(op.atlas.bg)
+			local act = op.active_style
+			local act_bg = act.bg and rgb_lit(act.bg) or bg
+			local act_atlas_fn = op.active_atlas and op.active_atlas.fn_name or op.atlas.fn_name
+			local act_border = act.border or op.normal_border
+			e("            if active.contains(&%d) {", op.active_idx)
+			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, act_bg)
+			for i, line in ipairs(op.lines) do
+				local ly = op.text_y + (i - 1) * op.line_step
+				emit_static_blit("                ", act_atlas_fn, op.align,
+					op.text_x, op.inner_w, ly, line)
+			end
+			emit_border("                ", op.x, op.y, op.w, op.h, act_border)
+			e("            } else {")
+			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, bg)
+			for i, line in ipairs(op.lines) do
+				local ly = op.text_y + (i - 1) * op.line_step
+				emit_static_blit("                ", op.atlas.fn_name, op.align,
+					op.text_x, op.inner_w, ly, line)
+			end
+			emit_border("                ", op.x, op.y, op.w, op.h, op.normal_border)
+			e("            }")
+		end
+		e("        }")
+		e("    }")
+	end
+
 	e("}")
 	e("")
 end
@@ -1690,6 +1757,28 @@ do
 	e("")
 	e("pub fn set_focused_raw(idx: Option<usize>) {")
 	e("    *FOCUSED.lock().unwrap() = idx;")
+	e("}")
+	e("")
+end
+
+-- emit set_active / clear_all_active
+if #all_active_ops > 0 then
+	e("pub fn set_active(id: &str, active: bool) {")
+	e("    let menu = *CURRENT_MENU.lock().unwrap();")
+	e("    let idx = match (menu, id) {")
+	for _, op in ipairs(all_active_ops) do
+		e("        (Some(Menu::%s), %q) => Some(%d),", op.active_menu, op.active_id, op.active_idx)
+	end
+	e("        _ => None,")
+	e("    };")
+	e("    if let Some(i) = idx {")
+	e("        let mut set = ACTIVE.lock().unwrap();")
+	e("        if active { set.insert(i); } else { set.remove(&i); }")
+	e("    }")
+	e("}")
+	e("")
+	e("pub fn clear_all_active() {")
+	e("    ACTIVE.lock().unwrap().clear();")
 	e("}")
 	e("")
 end

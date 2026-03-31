@@ -14,7 +14,16 @@ impl ui::Callbacks for GuiState {
         }
     }
     fn click (&mut self)              { println!("click"); }
-    fn action(&mut self, args: &[&str]) { println!("action {:?}", args); }
+    fn action(&mut self, args: &[&str]) {
+        // Toggle active styling for demo
+        let btns = &["Option A", "Option B", "Option C"];
+        let sel = match args.first().copied() {
+            Some("a") => 0, Some("b") => 1, Some("c") => 2, _ => return,
+        };
+        for (i, btn) in btns.iter().enumerate() {
+            ui::set_active(btn, i == sel);
+        }
+    }
 }
 
 fn current_values(t: f32) -> [(&'static str, String); 2] {
