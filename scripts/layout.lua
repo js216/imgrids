@@ -1427,7 +1427,7 @@ end
 local function get_focusable_ops(ops)
 	local raw = {}
 	for _, op in ipairs(ops) do
-		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress") and op.is_focusable then
+		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress" or op.kind == "icon") and op.is_focusable then
 			raw[#raw + 1] = op
 		end
 	end
@@ -1550,6 +1550,11 @@ for _, name in ipairs(menu_names) do
 				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 				-- Force progress bar redraw
 				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			elseif op.kind == "icon" then
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
+				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+					op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.foc.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 			else
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
 				if op.kind == "static" then
@@ -1567,6 +1572,11 @@ for _, name in ipairs(menu_names) do
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
 				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			elseif op.kind == "icon" then
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+					op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 			else
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 				if op.kind == "static" then
