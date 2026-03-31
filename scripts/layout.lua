@@ -619,6 +619,18 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		if cpress then
 			ops[#ops + 1] = { kind = "press_zone", x = x, y = y, w = w, h = h, press = cpress }
 		end
+
+		-- Active styling on container: fill_rect + border, children redraw themselves
+		if type(node) == "table" and node.active then
+			ops[#ops + 1] = {
+				kind = "container_active",
+				x = x, y = y, w = w, h = h,
+				bg = s.bg,
+				active_style = node.active,
+				active_id = node.active_id,
+				normal_border = { width = cbs.border.width, color = cbs.border.color, side = cbs.border.side },
+			}
+		end
 	else
 		-- Leaf node
 		local lbl, render, press, fmt, adjust, overload, active_style, active_id
@@ -832,6 +844,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					focus_index = focus_index,
 					foc = foc,
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
+					active_style = active_style,
+					active_id = active_id or (active_style and text),
 				}
 			end
 		elseif text then
@@ -974,10 +988,32 @@ e("// transpiler: %s", transpiler_hash)
 e("// input:      %s", input_hash)
 e("")
 
+-- Propagate active styling from container_active to static and dynamic children
+for _, name in ipairs(menu_names) do
+	local containers = {}
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "container_active" then
+			containers[#containers+1] = op
+		end
+	end
+	for _, op in ipairs(menu_ops[name]) do
+		if (op.kind == "dynamic" or op.kind == "static") and not op.active_style then
+			for _, c in ipairs(containers) do
+				if op.x >= c.x and op.y >= c.y
+				   and op.x + op.w <= c.x + c.w
+				   and op.y + op.h <= c.y + c.h then
+					op.active_style = c.active_style
+					break
+				end
+			end
+		end
+	end
+end
+
 -- Pre-create active atlases (must happen before atlas emission)
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
-		if op.kind == "static" and op.active_style and op.active_style.bg then
+		if (op.kind == "static" or op.kind == "dynamic") and op.active_style and op.active_style.bg and op.atlas then
 			op.active_atlas = get_atlas(op.atlas.font, op.atlas.fg, op.active_style.bg)
 		end
 	end
@@ -1088,6 +1124,8 @@ e("")
 local all_prog_ops = {}
 local all_dyn_ops = {}
 local all_active_ops = {}
+
+-- First pass: collect prog/dyn ops and container_active ops
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
@@ -1098,10 +1136,44 @@ for _, name in ipairs(menu_names) do
 			all_dyn_ops[#all_dyn_ops+1] = op
 			op.dyn_idx = #all_dyn_ops
 		end
-		if op.kind == "static" and op.active_style then
+	end
+end
+
+-- Second pass: collect active ops — only container_active and non-propagated leaf active ops
+-- Propagated children reuse their container's active_idx (set during propagation)
+for _, name in ipairs(menu_names) do
+	-- First assign indices to container_active ops
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "container_active" and op.active_style then
 			all_active_ops[#all_active_ops+1] = op
 			op.active_idx = #all_active_ops
 			op.active_menu = name
+		end
+	end
+	-- Then propagate active_idx to children
+	local containers = {}
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "container_active" then
+			containers[#containers+1] = op
+		end
+	end
+	for _, op in ipairs(menu_ops[name]) do
+		if (op.kind == "dynamic" or op.kind == "static") and op.active_style and not op.active_idx then
+			-- Check if this is a propagated child
+			for _, c in ipairs(containers) do
+				if op.x >= c.x and op.y >= c.y
+				   and op.x + op.w <= c.x + c.w
+				   and op.y + op.h <= c.y + c.h then
+					op.active_idx = c.active_idx
+					break
+				end
+			end
+			-- Non-propagated leaf with its own active_style
+			if not op.active_idx then
+				all_active_ops[#all_active_ops+1] = op
+				op.active_idx = #all_active_ops
+				op.active_menu = name
+			end
 		end
 	end
 end
@@ -1306,20 +1378,41 @@ end
 local function emit_dyn_blit(op, indent)
 	local ch = cell_height_est(op.atlas.font)
 	local bg = rgb_lit(op.atlas.bg)
+	local atlas_fn = op.atlas.fn_name
 	local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
+	-- Dynamic nodes inside active containers: bg and atlas depend on active state
+	if op.active_idx then
+		local act_bg = op.active_style.bg and rgb_lit(op.active_style.bg) or bg
+		local act_atlas = op.active_atlas and op.active_atlas.fn_name or atlas_fn
+		e("%slet is_active = ACTIVE.lock().unwrap().contains(&%d);", indent, op.active_idx)
+		e("%slet bg = if is_active { %s } else { %s };", indent, act_bg, bg)
+		if act_atlas ~= atlas_fn then
+			e("%slet a = if is_active { %s() } else { %s() };", indent, act_atlas, atlas_fn)
+		end
+		bg = "bg"
+	end
 	if op.fmt then
 		e("%slet val = &crate::%s(val);", indent, op.fmt)
 	end
+	-- For active nodes, 'a' is already set; for non-active, set it below
+	local use_local_a = op.active_idx and op.active_atlas and op.active_atlas.fn_name ~= op.atlas.fn_name
 	if op.align == "left" then
-		e("%slet end_x = backend.blit_clipped(%s(), %d, %d, val, %d);",
-			indent, op.atlas.fn_name, op.text_x, op.text_y, op.text_x + op.inner_w)
+		if use_local_a then
+			e("%slet end_x = backend.blit_clipped(a, %d, %d, val, %d);",
+				indent, op.text_x, op.text_y, op.text_x + op.inner_w)
+		else
+			e("%slet end_x = backend.blit_clipped(%s(), %d, %d, val, %d);",
+				indent, atlas_fn, op.text_x, op.text_y, op.text_x + op.inner_w)
+		end
 		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
 		e("%sif prev != usize::MAX && prev > end_x {", indent)
 		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
 		e("%s}", indent)
 	else
 		-- Center/right: clear old area then blit at computed x
-		e("%slet a = %s();", indent, op.atlas.fn_name)
+		if not use_local_a then
+			e("%slet a = %s();", indent, atlas_fn)
+		end
 		e("%slet prev = %s.load(Ordering::Relaxed);", indent, dyn_end)
 		e("%slet clear_w = if prev == usize::MAX { %d } else { prev.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
@@ -1621,6 +1714,27 @@ for _, name in ipairs(menu_names) do
 		e("    }")
 	end
 
+	-- Build lookups: container_active idx -> lists of static/dynamic children
+	local container_static_children = {}
+	local container_dyn_children = {}
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "container_active" and op.active_idx then
+			container_static_children[op.active_idx] = {}
+			container_dyn_children[op.active_idx] = {}
+		end
+	end
+	for _, op in ipairs(menu_ops[name]) do
+		if op.active_idx then
+			if op.kind == "static" then
+				local t = container_static_children[op.active_idx]
+				if t then t[#t+1] = op end
+			elseif op.kind == "dynamic" then
+				local t = container_dyn_children[op.active_idx]
+				if t then t[#t+1] = op end
+			end
+		end
+	end
+
 	-- Active state redraw for static nodes
 	local menu_active_ops = {}
 	for _, op in ipairs(all_active_ops) do
@@ -1636,25 +1750,64 @@ for _, name in ipairs(menu_names) do
 		e("            *last = active.clone();")
 		e("            drop(last);")
 		for _, op in ipairs(menu_active_ops) do
-			local bg = rgb_lit(op.atlas.bg)
+			local bg = op.atlas and rgb_lit(op.atlas.bg) or rgb_lit(op.bg)
 			local act = op.active_style
 			local act_bg = act.bg and rgb_lit(act.bg) or bg
-			local act_atlas_fn = op.active_atlas and op.active_atlas.fn_name or op.atlas.fn_name
 			local act_border = act.border or op.normal_border
 			e("            if active.contains(&%d) {", op.active_idx)
 			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, act_bg)
-			for i, line in ipairs(op.lines) do
-				local ly = op.text_y + (i - 1) * op.line_step
-				emit_static_blit("                ", act_atlas_fn, op.align,
-					op.text_x, op.inner_w, ly, line)
+			if op.lines then
+				local act_atlas_fn = op.active_atlas and op.active_atlas.fn_name or op.atlas.fn_name
+				for i, line in ipairs(op.lines) do
+					local ly = op.text_y + (i - 1) * op.line_step
+					emit_static_blit("                ", act_atlas_fn, op.align,
+						op.text_x, op.inner_w, ly, line)
+				end
+			end
+			-- Re-blit static children of container_active with active atlas
+			local children = container_static_children[op.active_idx]
+			if children then
+				for _, ch in ipairs(children) do
+					local ch_atlas = ch.active_atlas and ch.active_atlas.fn_name or ch.atlas.fn_name
+					for i, line in ipairs(ch.lines) do
+						local ly = ch.text_y + (i - 1) * ch.line_step
+						emit_static_blit("                ", ch_atlas, ch.align,
+							ch.text_x, ch.inner_w, ly, line)
+					end
+				end
+			end
+			-- Reset dynamic children so they redraw with correct bg
+			local dyn_ch = container_dyn_children[op.active_idx]
+			if dyn_ch then
+				for _, dc in ipairs(dyn_ch) do
+					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
+				end
 			end
 			emit_border("                ", op.x, op.y, op.w, op.h, act_border)
 			e("            } else {")
 			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, bg)
-			for i, line in ipairs(op.lines) do
-				local ly = op.text_y + (i - 1) * op.line_step
-				emit_static_blit("                ", op.atlas.fn_name, op.align,
-					op.text_x, op.inner_w, ly, line)
+			if op.lines then
+				for i, line in ipairs(op.lines) do
+					local ly = op.text_y + (i - 1) * op.line_step
+					emit_static_blit("                ", op.atlas.fn_name, op.align,
+						op.text_x, op.inner_w, ly, line)
+				end
+			end
+			-- Re-blit static children of container_active with normal atlas
+			if children then
+				for _, ch in ipairs(children) do
+					for i, line in ipairs(ch.lines) do
+						local ly = ch.text_y + (i - 1) * ch.line_step
+						emit_static_blit("                ", ch.atlas.fn_name, ch.align,
+							ch.text_x, ch.inner_w, ly, line)
+					end
+				end
+			end
+			-- Reset dynamic children so they redraw with correct bg
+			if dyn_ch then
+				for _, dc in ipairs(dyn_ch) do
+					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
+				end
 			end
 			emit_border("                ", op.x, op.y, op.w, op.h, op.normal_border)
 			e("            }")

@@ -172,9 +172,9 @@ pub use sdl2::init;
 pub mod web;
 #[cfg(feature = "web")]
 pub use web::init;
-#[cfg(feature = "web")]
+#[cfg(target_os = "emscripten")]
 pub use web::run;
-#[cfg(feature = "web")]
+#[cfg(target_os = "emscripten")]
 pub use web::sleep;
 
 #[cfg(not(target_os = "emscripten"))]
