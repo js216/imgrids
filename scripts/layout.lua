@@ -366,7 +366,16 @@ local function border_inset(s, side)
 	if s.border.width == 0 then
 		return 0
 	end
-	if s.border.side == nil or s.border.side == side then
+	if s.border.side == nil then
+		return s.border.width
+	end
+	if type(s.border.side) == "table" then
+		for _, ss in ipairs(s.border.side) do
+			if ss == side then return s.border.width end
+		end
+		return 0
+	end
+	if s.border.side == side then
 		return s.border.width
 	end
 	return 0
@@ -661,10 +670,22 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		local ch_px = cell_height_est(s.font)
 		local cw_px = char_width_est(s.font)
 		-- Inset by border + padding so text is drawn inside both
-		local bx = border_inset(s, "left") + eff_pad(s, "left")
-		local by = border_inset(s, "top") + eff_pad(s, "top")
-		local bw = bx + border_inset(s, "right") + eff_pad(s, "right")
-		local bh = by + border_inset(s, "bottom") + eff_pad(s, "bottom")
+		-- Use max of normal and focused border so text never overwrites focused border
+		local function text_border(side)
+			local nb = border_inset(s, side)
+			if is_focusable then
+				local fs = merge_style(s, focused_ovr)
+				if type(node) == "table" and node.focused then
+					fs = merge_style(fs, node.focused)
+				end
+				return math.max(nb, border_inset(fs, side))
+			end
+			return nb
+		end
+		local bx = text_border("left") + eff_pad(s, "left")
+		local by = text_border("top") + eff_pad(s, "top")
+		local bw = bx + text_border("right") + eff_pad(s, "right")
+		local bh = by + text_border("bottom") + eff_pad(s, "bottom")
 		local text_x = x + bx
 		local inner_w = math.max(0, w - bw)
 		local pad_chars = math.max(0, math.floor(inner_w / cw_px))
@@ -754,10 +775,23 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 
 		if lbl then
 			if render == "progress bar" then
-				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
-				local inset_t = eff_pad(s, "top") + border_inset(s, "top")
-				local inset_r = eff_pad(s, "right") + border_inset(s, "right")
-				local inset_b = eff_pad(s, "bottom") + border_inset(s, "bottom")
+				-- For progress bars, use the max of normal and focused border
+				-- so the fill area never overwrites the focused border
+				local function prog_border(side)
+					local nb = border_inset(s, side)
+					if is_focusable then
+						local fs = merge_style(s, focused_ovr)
+						if type(node) == "table" and node.focused then
+							fs = merge_style(fs, node.focused)
+						end
+						return math.max(nb, border_inset(fs, side))
+					end
+					return nb
+				end
+				local inset_l = eff_pad(s, "left") + prog_border("left")
+				local inset_t = eff_pad(s, "top") + prog_border("top")
+				local inset_r = eff_pad(s, "right") + prog_border("right")
+				local inset_b = eff_pad(s, "bottom") + prog_border("bottom")
 				ops[#ops + 1] = {
 					kind = "progress",
 					x = x, y = y, w = w, h = h,
