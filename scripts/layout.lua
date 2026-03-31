@@ -239,7 +239,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -612,7 +612,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 	else
 		-- Leaf node
-		local lbl, render, press, fmt, adjust
+		local lbl, render, press, fmt, adjust, overload
 		local text
 
 		if type(node) == "string" then
@@ -623,6 +623,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			press = get_press(node)
 			fmt = node.fmt
 			adjust = node.adjust
+			overload = node.overload
 			if not lbl and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
@@ -769,6 +770,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					bg = s.bg,
 					cell_bg = s.bg,
 					adjust = adjust,
+					overload = overload,
 					is_focusable = is_focusable,
 					focus_index = focus_index,
 					foc = foc,
@@ -1500,18 +1502,32 @@ for _, name in ipairs(menu_names) do
 			else
 				e("                let v = v.clamp(0.0, 1.0);")
 			end
+			local fg
+			if op.overload then
+				fg = ("if v >= 1.0 { %s } else { %s }"):format(rgb_lit(op.overload), rgb_lit(op.fg))
+			else
+				fg = rgb_lit(op.fg)
+			end
+			e("                let fg = %s;", fg)
 			e("                let filled = (%d.0_f32 * v) as usize;", op.pw)
-			e("                let prev = PROG_%d_PREV.swap(filled, Ordering::Relaxed);", op.prog_idx)
-			e("                if filled != prev {")
-			e("                    if prev == usize::MAX {")
-			e("                        if filled > 0 { backend.fill_rect(%d, %d, filled, %d, %s); }", op.px, op.py, op.ph, rgb_lit(op.fg))
-			e("                        if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
-			e("                    } else if filled > prev {")
-			e("                        backend.fill_rect(%s, %d, filled - prev, %d, %s);", x_prev, op.py, op.ph, rgb_lit(op.fg))
-			e("                    } else {")
-			e("                        backend.fill_rect(%s, %d, prev - filled, %d, %s);", x_filled, op.py, op.ph, rgb_lit(op.bg))
-			e("                    }")
-			e("                }")
+			if op.overload then
+				e("                PROG_%d_PREV.store(filled, Ordering::Relaxed);", op.prog_idx)
+				-- Always full redraw to handle color changes
+				e("                if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
+				e("                if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
+			else
+				e("                let prev = PROG_%d_PREV.swap(filled, Ordering::Relaxed);", op.prog_idx)
+				e("                if filled != prev {")
+				e("                    if prev == usize::MAX {")
+				e("                        if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
+				e("                        if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
+				e("                    } else if filled > prev {")
+				e("                        backend.fill_rect(%s, %d, filled - prev, %d, fg);", x_prev, op.py, op.ph)
+				e("                    } else {")
+				e("                        backend.fill_rect(%s, %d, prev - filled, %d, %s);", x_filled, op.py, op.ph, rgb_lit(op.bg))
+				e("                    }")
+				e("                }")
+			end
 			e("            }")
 			e("        }")
 		end
