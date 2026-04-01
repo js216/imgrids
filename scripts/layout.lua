@@ -2092,41 +2092,41 @@ for _, name in ipairs(menu_names) do
 	if #slider_ops > 0 then
 		e("    for &(name, val) in changes {")
 		for _, op in ipairs(slider_ops) do
-			local tri_w = 7  -- triangle width (must be odd)
-			local tri_h = math.min(5, op.sh) -- triangle height
-			local ribbon_h = op.sh - tri_h
+			local tri_h = math.floor(op.sh / 2)  -- triangle takes top half
+			local ribbon_h = op.sh - tri_h        -- ribbon takes bottom half
+			local tri_w = tri_h * 2 + 1           -- triangle width based on height
+			local ribbon_y = op.sy + tri_h        -- ribbon below triangle
+			local bg = rgb_lit(op.bg)
 			e("        if name == %q {", op.lbl)
 			e("            let v = val.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0);")
 			e("            let ribbon = SLIDER_%d_RIBBON;", op.slider_idx)
 			e("            let pos = (%d.0_f32 * v) as usize;", op.sw - 1)
 			e("            let prev = SLIDER_%d_PREV.swap(pos, Ordering::Relaxed);", op.slider_idx)
-			-- Draw ribbon (only on first draw or if we need full refresh)
+			-- Draw ribbon (only on first draw)
 			e("            if prev == usize::MAX {")
 			e("                for xi in 0..%d_usize {", op.sw)
 			e("                    let c = ribbon[xi.min(ribbon.len() - 1)];")
-			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, op.sy, ribbon_h)
+			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, ribbon_y, ribbon_h)
 			e("                }")
 			e("            }")
-			-- Erase old triangle (restore ribbon pixels under it)
+			-- Erase old triangle (clear with bg)
 			e("            if prev != usize::MAX && prev != pos {")
 			e("                let old_left = prev.saturating_sub(%d);", (tri_w - 1) / 2)
 			e("                let old_right = (prev + %d + 1).min(%d);", (tri_w - 1) / 2, op.sw)
-			e("                for xi in old_left..old_right {")
-			e("                    let c = ribbon[xi.min(ribbon.len() - 1)];")
-			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, op.sy + ribbon_h, tri_h)
-			e("                }")
+			e("                backend.fill_rect(%d + old_left, %d, old_right - old_left, %d, %s);",
+				op.sx, op.sy, tri_h, bg)
 			e("            }")
-			-- Draw new triangle (white downward-pointing)
+			-- Draw new triangle (white downward-pointing, vertex at bottom touching ribbon)
 			do
 				local fg = rgb_lit(op.fg)
 				for row = 0, tri_h - 1 do
 					local half = tri_h - 1 - row  -- narrowing from top to bottom
 					if half > 0 then
 						e("            { let cx = pos as isize; let l = (cx - %d).max(0) as usize; let r = (cx + %d + 1).min(%d) as usize; if r > l { backend.fill_rect(%d + l, %d, r - l, 1, %s); } }",
-							half, half, op.sw, op.sx, op.sy + ribbon_h + row, fg)
+							half, half, op.sw, op.sx, op.sy + row, fg)
 					else
 						e("            { backend.fill_rect(%d + pos, %d, 1, 1, %s); }",
-							op.sx, op.sy + ribbon_h + row, fg)
+							op.sx, op.sy + row, fg)
 					end
 				end
 			end
