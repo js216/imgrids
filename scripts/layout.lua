@@ -34,6 +34,23 @@ setmetatable(_G, {
 chunk()
 setmetatable(_G, _orig_globals_mt)
 
+-- Build param metadata lookup from global `params` table (loaded from params.txt)
+local param_info = {}  -- name → {opts={...}, prec=N, unit="...", is_angle=bool}
+if type(params) == "table" then
+	for _, p in ipairs(params) do
+		if p.name then
+			local info = {}
+			if p.opts and #p.opts > 0 then info.opts = p.opts end
+			if p.prec then info.prec = p.prec end
+			if p.unit then
+				info.unit = p.unit
+				info.is_angle = p.unit:sub(1,2) == "\u{00B0}" or p.unit:byte(1) == 0xC2 and p.unit:byte(2) == 0xB0
+			end
+			if next(info) then param_info[p.name] = info end
+		end
+	end
+end
+
 local warn_count = 0
 local function warn(fmt, ...)
 	io.stderr:write(("WARNING: " .. fmt .. "\n"):format(...))
@@ -2024,6 +2041,10 @@ do
 			end
 		end
 	end
+	-- Also skip params that have built-in formatting from param_info
+	for name, _ in pairs(param_info) do
+		fmt_params[name] = true
+	end
 	local sorted = {}
 	for k in pairs(fmt_params) do sorted[#sorted+1] = k end
 	table.sort(sorted)
@@ -2032,6 +2053,93 @@ do
 			(function() local t = {} for _, v in ipairs(sorted) do t[#t+1] = ("%q"):format(v) end return t end)(),
 			", "))
 	e("")
+end
+
+-- emit format_param(): built-in enum and numeric formatting from params.txt metadata
+do
+	-- Collect params that have formatting metadata and are used as dynamic labels
+	local used_params = {}
+	for _, name in ipairs(menu_names) do
+		for _, op in ipairs(menu_ops[name]) do
+			if op.kind == "dynamic" and op.lbl and param_info[op.lbl] and not op.fmt then
+				used_params[op.lbl] = true
+			end
+		end
+	end
+	local sorted = {}
+	for k in pairs(used_params) do sorted[#sorted+1] = k end
+	table.sort(sorted)
+
+	-- Unicode minus sign
+	local MINUS = "\u{2212}"
+
+	e("/// Format a parameter value using metadata from params.txt.")
+	e("/// Returns None if the parameter has no built-in formatting.")
+	if #sorted == 0 then
+		e("pub fn format_param(_name: &str, _val: &str) -> Option<String> { None }")
+		e("")
+	else
+		e("pub fn format_param(name: &str, val: &str) -> Option<String> {")
+		e("    match name {")
+		for _, pname in ipairs(sorted) do
+		local info = param_info[pname]
+		if info.opts then
+			-- Enum: index → option name
+			e("        %q => {", pname)
+			e("            let i = val.parse::<f64>().ok()? as usize;")
+			e("            Some(match i {")
+			for i, opt in ipairs(info.opts) do
+				e("                %d => %q.to_owned(),", i - 1, opt)
+			end
+			e("                _ => val.to_owned(),")
+			e("            })")
+			e("        }")
+		elseif info.prec then
+			-- Numeric: precision + optional unit + digit grouping
+			local prec = info.prec
+			local unit = info.unit
+			local is_angle = info.is_angle
+			e("        %q => {", pname)
+			e("            let n = val.parse::<f64>().ok()?;")
+			if is_angle then
+				-- Pad angles to 3 integer digits
+				e("            let raw = if n < 0.0 {")
+				e("                format!(\"-{:0>width$.prec$}\", n.abs(), width = %d, prec = %d)", prec + 4, prec)
+				e("            } else {")
+				e("                format!(\"{:0>width$.prec$}\", n, width = %d, prec = %d)", prec + 4, prec)
+				e("            };")
+			else
+				e("            let raw = format!(\"{:.%d}\", n);", prec)
+			end
+			e("            let formatted = if let Some(dot) = raw.find('.') {")
+			e("                let (int_str, dec_with_dot) = raw.split_at(dot);")
+			e("                let dec_part = &dec_with_dot[1..];")
+			e("                let grouped_dec: String = dec_part.chars().enumerate().map(|(i, c)| {")
+			e("                    if i > 0 && i % 3 == 0 { format!(\" {}\", c) } else { c.to_string() }")
+			e("                }).collect();")
+			e("                let grouped_int = crate::group_int_digits(int_str);")
+			e("                format!(\"{}.{}\", grouped_int, grouped_dec)")
+			e("            } else {")
+			e("                crate::group_int_digits(&raw)")
+			e("            };")
+			e("            let formatted = formatted.replacen('-', \"\\u{2212}\", 1);")
+			if unit then
+				if is_angle then
+					e("            Some(format!(\"{}%s\", formatted))", unit)
+				else
+					e("            Some(format!(\"{} %s\", formatted))", unit)
+				end
+			else
+				e("            Some(formatted)")
+			end
+			e("        }")
+			end
+		end
+		e("        _ => None,")
+		e("    }")
+		e("}")
+		e("")
+	end
 end
 
 -- emit focused_adjust(): returns (param_name, min, max) for adjustable focused element

@@ -394,7 +394,7 @@ menus = {
       nav("MultilineAlign", "FontIcons"),
       {lbl = "parameter One", align = "left"},
       {lbl = "parameter Two", align = "center"},
-      {lbl = "parameter Two", align = "right"},
+      {lbl = "parameter Three", align = "right"},
    },
 
    FontIcons = {"col",
