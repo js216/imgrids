@@ -249,7 +249,7 @@ end
 local STYLE_KEYS = {
 	font=1, fg=1, bg=1, pad=1, pad_left=1, pad_top=1, pad_right=1, pad_bottom=1,
 	margin=1, margin_left=1, margin_top=1, margin_right=1, margin_bottom=1,
-	border=1, align=1,
+	border=1, align=1, valign=1,
 }
 local BORDER_KEYS = { width=1, color=1, side=1 }
 local NODE_KEYS = {
@@ -350,6 +350,9 @@ local function merge_style(base, node)
 		if s.border.width == 0 and s.border.side then
 			warn("border has side='%s' but width=0 (no pixels drawn)", s.border.side)
 		end
+	end
+	if node.valign then
+		s.valign = node.valign
 	end
 	return s
 end
@@ -750,7 +753,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		local text_x = x + bx
 		local inner_w = math.max(0, w - bw)
 		local pad_chars = math.max(0, math.floor(inner_w / cw_px))
-		-- Split text on \n; center the whole block vertically
+		-- Split text on \n; center the whole block vertically (unless valign="top")
 		local line_gap = 2
 		local lines = {}
 		if text then
@@ -760,7 +763,13 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 		local n_lines = math.max(1, #lines)
 		local block_h = n_lines * ch_px + (n_lines - 1) * line_gap
-		local text_y = (y + by) + math.floor(((h - bh) - block_h) / 2)
+		local valign = s.valign or "center"
+		local text_y
+		if valign == "top" then
+			text_y = y + by
+		else
+			text_y = (y + by) + math.floor(((h - bh) - block_h) / 2)
+		end
 		local line_step = ch_px + line_gap
 		-- Per-line x positions for static text alignment
 		local line_xs = {}
@@ -1701,14 +1710,16 @@ local function emit_dyn_blit(op, indent, val_expr)
 		e("%s    let prev_end = %s.load(Ordering::Relaxed);", indent, dyn_end)
 		e("%s    let clear_w = if prev_end == usize::MAX { %d } else { prev_end.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
-		e("%s    backend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, ch, bg)
-		-- Compute text width (excluding escape chars)
-		e("%s    let tw: usize = %s.chars().filter(|&c| c > '\\x09' || c == '\\n').map(|c| if c == '\\n' { 0 } else { %s().char_width(c) }).sum();",
-			indent, val_expr, atlas_fn)
+		local clear_h = op.h - (op.text_y - op.y)
+		e("%s    backend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, clear_h, bg)
 		if op.align == "center" then
+			e("%s    let tw: usize = %s.chars().filter(|&c| c > '\\x09' || c == '\\n').map(|c| if c == '\\n' { 0 } else { %s().char_width(c) }).sum();",
+				indent, val_expr, atlas_fn)
 			e("%s    let start_x = %d + (%d_usize.saturating_sub(tw)) / 2;",
 				indent, op.text_x, op.inner_w)
 		elseif op.align == "right" then
+			e("%s    let tw: usize = %s.chars().filter(|&c| c > '\\x09' || c == '\\n').map(|c| if c == '\\n' { 0 } else { %s().char_width(c) }).sum();",
+				indent, val_expr, atlas_fn)
 			e("%s    let start_x = %d + %d_usize.saturating_sub(tw);",
 				indent, op.text_x, op.inner_w)
 		else
