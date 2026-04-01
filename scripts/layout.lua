@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -670,6 +670,9 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			if node.derived then
 				derived = { sources = node.derived, sep = node.derived_sep, fn_name = node.derived_fn }
 			end
+			if node.ribbon and type(node.ribbon) == "function" then
+				render = "pointer slider"
+			end
 			if not lbl and not icon_path and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
@@ -902,6 +905,34 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					adjust = adjust,
 					overload = overload,
 					bidir = bidir,
+					is_focusable = is_focusable,
+					focus_index = focus_index,
+					foc = foc,
+					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
+				}
+			elseif render == "pointer slider" then
+				local inset_l = eff_pad(s, "left")
+				local inset_t = eff_pad(s, "top")
+				local inset_r = eff_pad(s, "right")
+				local inset_b = eff_pad(s, "bottom")
+				local sw = math.max(0, w - inset_l - inset_r)
+				local sh = math.max(0, h - inset_t - inset_b)
+				-- Pre-compute ribbon colors by calling the Lua function for each x
+				local ribbon_colors = {}
+				local ribbon_fn = type(node) == "table" and node.ribbon
+				for xi = 0, sw - 1 do
+					local t = sw > 1 and xi / (sw - 1) or 0
+					local c = ribbon_fn(t)
+					ribbon_colors[#ribbon_colors+1] = c
+				end
+				ops[#ops + 1] = {
+					kind = "slider",
+					x = x, y = y, w = w, h = h,
+					sx = x + inset_l, sy = y + inset_t, sw = sw, sh = sh,
+					lbl = lbl,
+					fg = s.fg,
+					bg = s.bg,
+					ribbon = ribbon_colors,
 					is_focusable = is_focusable,
 					focus_index = focus_index,
 					foc = foc,
@@ -1274,13 +1305,18 @@ e("")
 local all_prog_ops = {}
 local all_dyn_ops = {}
 local all_active_ops = {}
+local all_slider_ops = {}
 
--- First pass: collect prog/dyn ops and container_active ops
+-- First pass: collect prog/dyn/slider ops and container_active ops
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
 			all_prog_ops[#all_prog_ops+1] = op
 			op.prog_idx = #all_prog_ops
+		end
+		if op.kind == "slider" then
+			all_slider_ops[#all_slider_ops+1] = op
+			op.slider_idx = #all_slider_ops
 		end
 		if op.kind == "dynamic" then
 			all_dyn_ops[#all_dyn_ops+1] = op
@@ -1359,7 +1395,7 @@ for _, name in ipairs(menu_names) do
 	end
 end
 
-local need_atomics = #all_prog_ops + #all_dyn_ops > 0
+local need_atomics = #all_prog_ops + #all_dyn_ops + #all_slider_ops > 0
 if need_atomics then
 	e("use std::sync::atomic::{AtomicUsize, Ordering};")
 	for i = 1, #all_prog_ops do
@@ -1367,6 +1403,15 @@ if need_atomics then
 	end
 	for i = 1, #all_dyn_ops do
 		e("static DYN_%d_END: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
+	end
+	for i, op in ipairs(all_slider_ops) do
+		e("static SLIDER_%d_PREV: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
+		-- Ribbon pixel data: one RGB per x position
+		local parts = {}
+		for _, c in ipairs(op.ribbon) do
+			parts[#parts+1] = rgb_lit(c)
+		end
+		e("static SLIDER_%d_RIBBON: &[imgrids::Pixel] = &[%s];", i, table.concat(parts, ", "))
 	end
 	e("")
 end
@@ -1474,6 +1519,9 @@ e("        ACTIVE.lock().unwrap().clear();")
 e("        LAST_DRAWN_ACTIVE.lock().unwrap().clear();")
 for i = 1, #all_prog_ops do
 	e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
+end
+for i = 1, #all_slider_ops do
+	e("        SLIDER_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
 end
 for i = 1, #all_dyn_ops do
 	e("        DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", i)
@@ -1990,6 +2038,57 @@ for _, name in ipairs(menu_names) do
 					e("                }")
 				end
 				e("            }")
+			end
+			e("        }")
+		end
+		e("    }")
+	end
+
+	-- Pointer slider rendering
+	local slider_ops = {}
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "slider" then slider_ops[#slider_ops+1] = op end
+	end
+	if #slider_ops > 0 then
+		e("    for &(name, val) in changes {")
+		for _, op in ipairs(slider_ops) do
+			local tri_w = 7  -- triangle width (must be odd)
+			local tri_h = math.min(5, op.sh) -- triangle height
+			local ribbon_h = op.sh - tri_h
+			e("        if name == %q {", op.lbl)
+			e("            let v = val.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0);")
+			e("            let ribbon = SLIDER_%d_RIBBON;", op.slider_idx)
+			e("            let pos = (%d.0_f32 * v) as usize;", op.sw - 1)
+			e("            let prev = SLIDER_%d_PREV.swap(pos, Ordering::Relaxed);", op.slider_idx)
+			-- Draw ribbon (only on first draw or if we need full refresh)
+			e("            if prev == usize::MAX {")
+			e("                for xi in 0..%d_usize {", op.sw)
+			e("                    let c = ribbon[xi.min(ribbon.len() - 1)];")
+			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, op.sy, ribbon_h)
+			e("                }")
+			e("            }")
+			-- Erase old triangle (restore ribbon pixels under it)
+			e("            if prev != usize::MAX && prev != pos {")
+			e("                let old_left = prev.saturating_sub(%d);", (tri_w - 1) / 2)
+			e("                let old_right = (prev + %d + 1).min(%d);", (tri_w - 1) / 2, op.sw)
+			e("                for xi in old_left..old_right {")
+			e("                    let c = ribbon[xi.min(ribbon.len() - 1)];")
+			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, op.sy + ribbon_h, tri_h)
+			e("                }")
+			e("            }")
+			-- Draw new triangle (white downward-pointing)
+			do
+				local fg = rgb_lit(op.fg)
+				for row = 0, tri_h - 1 do
+					local half = tri_h - 1 - row  -- narrowing from top to bottom
+					if half > 0 then
+						e("            { let cx = pos as isize; let l = (cx - %d).max(0) as usize; let r = (cx + %d + 1).min(%d) as usize; if r > l { backend.fill_rect(%d + l, %d, r - l, 1, %s); } }",
+							half, half, op.sw, op.sx, op.sy + ribbon_h + row, fg)
+					else
+						e("            { backend.fill_rect(%d + pos, %d, 1, 1, %s); }",
+							op.sx, op.sy + ribbon_h + row, fg)
+					end
+				end
 			end
 			e("        }")
 		end

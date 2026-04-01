@@ -423,9 +423,9 @@ menus = {
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
       border = {width = 2, color = colors.white},
-      {"[31/31] Popup Positioning",                                 size = 40, style = s_title},
+      {"[32/32] Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("MidString", "Hello"),
+      nav("Widgets", "Hello"),
    },
 }
 
@@ -527,9 +527,9 @@ menus.ActiveStyle = {"col",
 }
 
 menus.MidString = {"col",
-   {"[30/31] Mid-String Font/Color Change",                       size = 40, style = s_title},
+   {"[30/32] Mid-String Font/Color Change",                       size = 40, style = s_title},
    {"blit() returns ending x, so chained\ncalls can change font/color mid-text.", size = 50, style = s_desc},
-   nav("ActiveStyle", "Popup"),
+   nav("ActiveStyle", "Widgets"),
    -- Row with segments in different fonts (rendered by app code, not transpiler)
    {"row", size = 50,
       {"Large+", weight = 1, style = {font = fonts.myriad_large, fg = colors.white}},
@@ -540,4 +540,39 @@ menus.MidString = {"col",
       {"Proportional", weight = 1, style = {font = fonts.myriad_large, fg = colors.white}},
    },
    {"The transpiler places each segment\nas its own cell. blit() chaining is\nfor app-level code (see Backend::blit).", style = {border = {width = 0}}},
+}
+
+-- Ribbon color function: hue sweep from blue to red
+local function hue_ribbon(t)
+   -- HSV with H from 240° (blue) to 0° (red) as t goes 0→1
+   local h = (1 - t) * 240
+   local s, v = 1.0, 1.0
+   local c = v * s
+   local x = c * (1 - math.abs((h / 60) % 2 - 1))
+   local m = v - c
+   local r, g, b
+   if h < 60 then r, g, b = c, x, 0
+   elseif h < 120 then r, g, b = x, c, 0
+   elseif h < 180 then r, g, b = 0, c, x
+   elseif h < 240 then r, g, b = 0, x, c
+   else r, g, b = x, 0, c end
+   return {math.floor((r + m) * 255), math.floor((g + m) * 255), math.floor((b + m) * 255)}
+end
+
+menus.Widgets = {"col",
+   {"[31/32] Widgets: Progress Bar + Slider",                    size = 40, style = s_title},
+   {"render=\"progress bar\" and\nrender=\"pointer slider\" (with ribbon=).", size = 50, style = s_desc},
+   nav("MidString", "Popup"),
+   {"row",
+      {"Progress:", weight = 1},
+      {lbl = "parameter One", render = "progress bar",
+       style = {pad = 10, fg = colors.green}},
+   },
+   {"row",
+      {"Slider:", weight = 1},
+      {lbl = "parameter One", render = "pointer slider", size = 20,
+       ribbon = hue_ribbon,
+       style = {pad = 2, fg = colors.white}},
+   },
+   {"The slider shows a white triangle\nover a hue-sweep ribbon. Both track\nthe same parameter.", style = {border = {width = 0}}},
 }
