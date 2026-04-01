@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -650,7 +650,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 	else
 		-- Leaf node
-		local lbl, render, press, fmt, adjust, overload, active_style, active_id, bidir
+		local lbl, render, press, fmt, adjust, overload, active_style, active_id, bidir, derived
 		local text
 		local icon_path
 
@@ -667,6 +667,9 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			active_id = node.active_id
 			icon_path = node.icon
 			bidir = node.bidir
+			if node.derived then
+				derived = { sources = node.derived, sep = node.derived_sep, fn_name = node.derived_fn }
+			end
 			if not lbl and not icon_path and type(node[1]) == "string" and node[1] ~= "row" and node[1] ~= "col" then
 				text = node[1]
 			end
@@ -926,6 +929,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 					active_style = active_style,
 					active_id = active_id or (active_style and text),
+					derived = derived,
 				}
 			end
 		elseif text then
@@ -1296,6 +1300,17 @@ for _, name in ipairs(menu_names) do
 	end
 end
 
+-- Collect derived label ops and assign indices
+local all_derived_ops = {}
+for _, name in ipairs(menu_names) do
+	for _, op in ipairs(menu_ops[name]) do
+		if op.kind == "dynamic" and op.derived then
+			all_derived_ops[#all_derived_ops+1] = op
+			op.derived_idx = #all_derived_ops
+		end
+	end
+end
+
 local need_atomics = #all_prog_ops + #all_dyn_ops > 0
 if need_atomics then
 	e("use std::sync::atomic::{AtomicUsize, Ordering};")
@@ -1304,6 +1319,16 @@ if need_atomics then
 	end
 	for i = 1, #all_dyn_ops do
 		e("static DYN_%d_END: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
+	end
+	e("")
+end
+
+-- Derived label statics: store last raw value per constituent param
+if #all_derived_ops > 0 then
+	for _, op in ipairs(all_derived_ops) do
+		for j, src in ipairs(op.derived.sources) do
+			e("static DERIVED_%d_%d: Mutex<String> = Mutex::new(String::new());", op.derived_idx, j)
+		end
 	end
 	e("")
 end
@@ -1498,7 +1523,8 @@ local function get_focusable_ops(ops)
 end
 
 -- Helper: emit blit code for a single dynamic label
-local function emit_dyn_blit(op, indent)
+local function emit_dyn_blit(op, indent, val_expr)
+	val_expr = val_expr or "val"
 	local ch = cell_height_est(op.atlas.font)
 	local bg = rgb_lit(op.atlas.bg)
 	local atlas_fn = op.atlas.fn_name
@@ -1515,7 +1541,7 @@ local function emit_dyn_blit(op, indent)
 		bg = "bg"
 	end
 	if op.fmt then
-		e("%slet val = &crate::%s(val);", indent, op.fmt)
+		e("%slet %s = &crate::%s(%s);", indent, val_expr, op.fmt, val_expr)
 	end
 	-- For active nodes, 'a' is already set; for non-active, set it below
 	local use_local_a = op.active_idx and op.active_atlas and op.active_atlas.fn_name ~= op.atlas.fn_name
@@ -1761,11 +1787,55 @@ for _, name in ipairs(menu_names) do
 	local chg_param = (#dyn_ops + #prog_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
 	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
-	if #dyn_ops > 0 then
+	-- Derived labels: watch constituent params and rebuild
+	local derived_ops = {}
+	for _, op in ipairs(dyn_ops) do
+		if op.derived then derived_ops[#derived_ops+1] = op end
+	end
+	for _, op in ipairs(derived_ops) do
+		local src_checks = {}
+		for _, src in ipairs(op.derived.sources) do
+			src_checks[#src_checks+1] = ("n == %q"):format(src)
+		end
+		e("    {")
+		e("        let mut dirty = false;")
+		e("        for &(n, v) in changes {")
+		for j, src in ipairs(op.derived.sources) do
+			e("            if n == %q { *DERIVED_%d_%d.lock().unwrap() = v.to_owned(); dirty = true; }", src, op.derived_idx, j)
+		end
+		e("        }")
+		e("        if dirty {")
+		-- Compute the derived value
+		if op.derived.fn_name == "dots" then
+			-- Special: repeat "·" (value+1) times
+			e("            let idx: usize = DERIVED_%d_1.lock().unwrap().parse().unwrap_or(0);", op.derived_idx)
+			e("            let val = \"\\u{00B7}\".repeat(idx + 1);")
+		elseif op.derived.sep then
+			-- Join formatted constituent values with separator
+			local parts = {}
+			for j, src in ipairs(op.derived.sources) do
+				parts[#parts+1] = ("format_param(%q, &DERIVED_%d_%d.lock().unwrap()).unwrap_or_default()"):format(src, op.derived_idx, j)
+			end
+			e("            let val = [%s].join(%q);", table.concat(parts, ", "), op.derived.sep)
+		end
+		e("            let val: &str = &val;")
+		-- Render via emit_dyn_blit logic (inline the rendering)
+		emit_dyn_blit(op, "            ")
+		e("        }")
+		e("    }")
+	end
+
+	-- Filter out derived ops from normal dyn processing
+	local normal_dyn_ops = {}
+	for _, op in ipairs(dyn_ops) do
+		if not op.derived then normal_dyn_ops[#normal_dyn_ops+1] = op end
+	end
+
+	if #normal_dyn_ops > 0 then
 		-- Guard behind a check for matching label names (deduplicated)
 		local seen_lbl = {}
 		local conds = {}
-		for _, op in ipairs(dyn_ops) do
+		for _, op in ipairs(normal_dyn_ops) do
 			if not seen_lbl[op.lbl] then
 				seen_lbl[op.lbl] = true
 				conds[#conds+1] = ("n == %q"):format(op.lbl)
@@ -1773,7 +1843,7 @@ for _, name in ipairs(menu_names) do
 		end
 		e("    if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
 		e("        for &(name, val) in changes {")
-		for _, op in ipairs(dyn_ops) do
+		for _, op in ipairs(normal_dyn_ops) do
 			e("            if name == %q {", op.lbl)
 			emit_dyn_blit(op, "                ")
 			e("            }")
