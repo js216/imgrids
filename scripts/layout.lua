@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, multipart=1, font=1, fg=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -516,6 +516,34 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		warn("margin exceeds available size, cell clipped to zero")
 		w = math.max(0, w)
 		h = math.max(0, h)
+	end
+
+	-- Multipart text: renders multiple segments with different atlases
+	if type(node) == "table" and node.multipart then
+		local bg_color = default_style.bg
+		if leaf_style and leaf_style.bg then bg_color = leaf_style.bg end
+		if type(node.style) == "table" and node.style.bg then bg_color = node.style.bg end
+		ops[#ops + 1] = { kind = "fill", x = x, y = y, w = w, h = h, color = bg_color }
+		-- Collect segments with their atlases
+		local segments = {}
+		for _, seg in ipairs(node.multipart) do
+			local seg_text = seg[1]
+			local seg_font = seg.font
+			local seg_fg = seg.fg or default_style.fg
+			local seg_bg = bg_color
+			local a = get_atlas(seg_font, seg_fg, seg_bg)
+			segments[#segments+1] = { text = seg_text, atlas = a }
+		end
+		local pad = 10
+		if type(node.style) == "table" and node.style.pad then pad = node.style.pad end
+		ops[#ops + 1] = {
+			kind = "multipart",
+			x = x, y = y, w = w, h = h,
+			text_x = x + pad,
+			text_y = y + pad,
+			segments = segments,
+		}
+		return
 	end
 
 	if is_container(node) then
@@ -1583,7 +1611,19 @@ for _, name in ipairs(menu_names) do
 				emit_static_blit("    ", op.atlas.fn_name, op.align,
 					op.text_x, op.inner_w, y, line)
 			end
-		elseif op.kind == "dynamic" or op.kind == "progress" then
+		elseif op.kind == "multipart" then
+			-- Chain blit calls with different atlases
+			e("    {")
+			e("        let mut cx = %d_usize;", op.text_x)
+			for i, seg in ipairs(op.segments) do
+				if i < #op.segments then
+					e("        cx = backend.blit(%s(), cx, %d, %q);", seg.atlas.fn_name, op.text_y, seg.text)
+				else
+					e("        let _ = backend.blit(%s(), cx, %d, %q);", seg.atlas.fn_name, op.text_y, seg.text)
+				end
+			end
+			e("    }")
+		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" then
 			local bg = op.atlas and op.atlas.bg or op.bg
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
 		elseif op.kind == "fill" then
