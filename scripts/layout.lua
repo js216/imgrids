@@ -1076,8 +1076,10 @@ end
 -- Pre-create active atlases (must happen before atlas emission)
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
-		if (op.kind == "static" or op.kind == "dynamic") and op.active_style and op.active_style.bg and op.atlas then
-			op.active_atlas = get_atlas(op.atlas.font, op.atlas.fg, op.active_style.bg)
+		if (op.kind == "static" or op.kind == "dynamic") and op.active_style and (op.active_style.bg or op.active_style.fg) and op.atlas then
+			local act_fg = op.active_style.fg or op.atlas.fg
+			local act_bg = op.active_style.bg or op.atlas.bg
+			op.active_atlas = get_atlas(op.atlas.font, act_fg, act_bg)
 		end
 	end
 end
