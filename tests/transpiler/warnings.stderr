@@ -9,4 +9,5 @@ WARNING: margin exceeds available size, cell clipped to zero
 WARNING: unknown key 'blah' in node
 WARNING: unknown key 'size' in style=
 WARNING: unknown key 'radius' in border=
+WARNING: colors= has 10 entries but max is 9 (\x01-\x09) on label "too_many"
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32

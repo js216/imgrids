@@ -529,25 +529,13 @@ menus.ActiveStyle = {"col",
 }
 
 menus.MidString = {"col",
-   {"[30/34] Mid-String Font/Color Change",                       size = 40, style = s_title},
-   {"blit() returns ending x, so chained\ncalls change font/color mid-string.", size = 50, style = s_desc},
+   {"[30/34] Multi-Style Strings",                                size = 40, style = s_title},
+   {"colors= defines alternate styles.\n\\x01-\\x09 switch, \\x00 restores default.", size = 50, style = s_desc},
    nav("ActiveStyle", "Widgets"),
-   {"row", size = 50,
-      multipart = {
-         {"Te", font = fonts.myriad_large, fg = colors.red},
-         {"st", font = fonts.myriad_large, fg = colors.green},
-         {"ing mi", font = fonts.myriad_small, fg = colors.yellow},
-         {"xed", font = fonts.roboto_large, fg = colors.blue},
-      },
-   },
-   {"row", size = 50,
-      multipart = {
-         {"Hel", font = fonts.myriad_large, fg = colors.white},
-         {"loWor", font = fonts.roboto_large, fg = colors.green},
-         {"ld", font = fonts.myriad_large, fg = colors.red},
-      },
-   },
-   {"Font changes mid-word to prove\nthis is chained blitting, not\nseparate cells.", style = {border = {width = 0}}},
+   -- Dynamic label with color escape codes + newlines
+   {lbl = "color_demo", align = "center",
+    colors = {colors.green, colors.red, {font = fonts.myriad_small, fg = colors.yellow}}},
+   {"colors={green, red, {small+yellow}}\n\\x01=green \\x02=red \\x03=small+yellow\n\\x00=default. Newlines work too!", style = {border = {width = 0}}},
 }
 
 -- Ribbon color function: hue sweep from blue to red

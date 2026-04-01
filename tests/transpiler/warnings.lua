@@ -22,6 +22,9 @@ menus = {
         {"bad node key", blah = 1},       -- (7) unknown key in node
         {"bad style key", style = {size = 60}},  -- (8) unknown key in style=
         {"bad border key", border = {width = 1, radius = 5}}, -- (9) unknown key in border=
+        {lbl = "too_many", colors = {                         -- (10) >9 alternate styles
+            {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
+            {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}}},
     },
     -- (6) text exceeds screen bounds: tall fixed child leaves only 10px
     -- for the last child, but the 16px font can't fit, overflows screen

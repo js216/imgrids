@@ -26,10 +26,12 @@ impl ui::Callbacks for GuiState {
     }
 }
 
-fn current_values(t: f32) -> [(&'static str, String); 2] {
-    [
+fn current_values(t: f32) -> Vec<(&'static str, String)> {
+    vec![
         ("parameter One", format!("{:.3}", t.sin().abs())),
         ("parameter Two", format!("{:.3}", (t * 0.5).cos().abs() * 1.3)),
+        ("parameter Three", format!("{:.3}", (t * 0.3).sin())),
+        ("color_demo", "Whi\x01te+Gre\x00en \x02Red\x00\n\x03Small Yellow\x00 Normal".to_owned()),
     ]
 }
 

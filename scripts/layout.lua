@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, multipart=1, font=1, fg=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, font=1, fg=1, dim=1, colors=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -518,34 +518,6 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		h = math.max(0, h)
 	end
 
-	-- Multipart text: renders multiple segments with different atlases
-	if type(node) == "table" and node.multipart then
-		local bg_color = default_style.bg
-		if leaf_style and leaf_style.bg then bg_color = leaf_style.bg end
-		if type(node.style) == "table" and node.style.bg then bg_color = node.style.bg end
-		ops[#ops + 1] = { kind = "fill", x = x, y = y, w = w, h = h, color = bg_color }
-		-- Collect segments with their atlases
-		local segments = {}
-		for _, seg in ipairs(node.multipart) do
-			local seg_text = seg[1]
-			local seg_font = seg.font
-			local seg_fg = seg.fg or default_style.fg
-			local seg_bg = bg_color
-			local a = get_atlas(seg_font, seg_fg, seg_bg)
-			segments[#segments+1] = { text = seg_text, atlas = a }
-		end
-		local pad = 10
-		if type(node.style) == "table" and node.style.pad then pad = node.style.pad end
-		ops[#ops + 1] = {
-			kind = "multipart",
-			x = x, y = y, w = w, h = h,
-			text_x = x + pad,
-			text_y = y + pad,
-			segments = segments,
-		}
-		return
-	end
-
 	if is_container(node) then
 		local dir = node[1]
 
@@ -735,6 +707,26 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 
 		local needs_atlas = (text or lbl) and render ~= "progress bar"
 		local atlas = needs_atlas and get_atlas(s.font, s.fg, s.bg) or nil
+		-- Alternate styles for \x01-\x09 escape codes: each entry is {font=..., fg=...}
+		-- Shorthand: bare color table = same font, different fg
+		local alt_atlases = nil
+		if atlas and type(node) == "table" then
+			local alts = node.colors or (node.dim and {node.dim})
+			if alts then
+				if #alts > 9 then
+					warn("colors= has %d entries but max is 9 (\\x01-\\x09) on label %q", #alts, lbl or text or "?")
+				end
+				alt_atlases = {}
+				for i, alt in ipairs(alts) do
+					if i > 9 then break end
+					if type(alt) == "table" and alt.font then
+						alt_atlases[#alt_atlases+1] = get_atlas(alt.font, alt.fg or s.fg, s.bg)
+					else
+						alt_atlases[#alt_atlases+1] = get_atlas(s.font, alt, s.bg)
+					end
+				end
+			end
+		end
 		local ch_px = cell_height_est(s.font)
 		local cw_px = char_width_est(s.font)
 		-- Inset by border + padding so text is drawn inside both
@@ -978,6 +970,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					lbl = lbl,
 					fmt = fmt,
 					atlas = atlas,
+					alt_atlases = alt_atlases,
 					pad_chars = pad_chars,
 					align = align,
 					inner_w = inner_w,
@@ -1611,28 +1604,6 @@ for _, name in ipairs(menu_names) do
 				emit_static_blit("    ", op.atlas.fn_name, op.align,
 					op.text_x, op.inner_w, y, line)
 			end
-		elseif op.kind == "multipart" then
-			-- Chain blit calls with different atlases, centered in cell
-			e("    {")
-			-- Compute total width
-			local tw_parts = {}
-			for _, seg in ipairs(op.segments) do
-				tw_parts[#tw_parts+1] = ("%s().text_width(%q)"):format(seg.atlas.fn_name, seg.text)
-			end
-			e("        let tw = %s;", table.concat(tw_parts, " + "))
-			if op.x > 0 then
-				e("        let mut cx = %d + (%d_usize.saturating_sub(tw)) / 2;", op.x, op.w)
-			else
-				e("        let mut cx = (%d_usize.saturating_sub(tw)) / 2;", op.w)
-			end
-			for i, seg in ipairs(op.segments) do
-				if i < #op.segments then
-					e("        cx = backend.blit(%s(), cx, %d, %q);", seg.atlas.fn_name, op.text_y, seg.text)
-				else
-					e("        let _ = backend.blit(%s(), cx, %d, %q);", seg.atlas.fn_name, op.text_y, seg.text)
-				end
-			end
-			e("    }")
 		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" then
 			local bg = op.atlas and op.atlas.bg or op.bg
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
@@ -1713,6 +1684,51 @@ local function emit_dyn_blit(op, indent, val_expr)
 	if op.fmt then
 		e("%slet %s = &crate::%s(%s);", indent, val_expr, op.fmt, val_expr)
 	end
+
+	-- Multi-color/font support: \x01-\x09 select alternate atlas, \x00 restores default
+	if op.alt_atlases and #op.alt_atlases > 0 then
+		-- Build atlas array
+		local alt_fns = {}
+		for _, a in ipairs(op.alt_atlases) do
+			alt_fns[#alt_fns+1] = ("%s()"):format(a.fn_name)
+		end
+		e("%s{", indent)
+		e("%s    let prev_end = %s.load(Ordering::Relaxed);", indent, dyn_end)
+		e("%s    let clear_w = if prev_end == usize::MAX { %d } else { prev_end.saturating_sub(%d) };",
+			indent, op.inner_w, op.text_x)
+		e("%s    backend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, ch, bg)
+		-- Compute text width (excluding escape chars)
+		e("%s    let tw: usize = %s.chars().filter(|&c| c > '\\x09' || c == '\\n').map(|c| if c == '\\n' { 0 } else { %s().char_width(c) }).sum();",
+			indent, val_expr, atlas_fn)
+		if op.align == "center" then
+			e("%s    let start_x = %d + (%d_usize.saturating_sub(tw)) / 2;",
+				indent, op.text_x, op.inner_w)
+		elseif op.align == "right" then
+			e("%s    let start_x = %d + %d_usize.saturating_sub(tw);",
+				indent, op.text_x, op.inner_w)
+		else
+			e("%s    let start_x = %d_usize;", indent, op.text_x)
+		end
+		e("%s    let mut cx = start_x;", indent)
+		e("%s    let alts: &[&dyn imgrids::Renderer] = &[%s];", indent, table.concat(alt_fns, ", "))
+		e("%s    let mut cur: &dyn imgrids::Renderer = %s();", indent, atlas_fn)
+		e("%s    let mut cy = %d_usize;", indent, op.text_y)
+		e("%s    for c in %s.chars() {", indent, val_expr)
+		e("%s        if c == '\\x00' { cur = %s(); continue; }", indent, atlas_fn)
+		e("%s        if ('\\x01'..='\\x09').contains(&c) {", indent)
+		e("%s            let idx = (c as usize) - 1;", indent)
+		e("%s            if idx < alts.len() { cur = alts[idx]; }", indent)
+		e("%s            continue;", indent)
+		e("%s        }", indent)
+		e("%s        if c == '\\n' { cy += %s().cell_height() + 2; cx = start_x; continue; }", indent, atlas_fn)
+		e("%s        let s: String = c.to_string();", indent)
+		e("%s        cx = backend.blit(cur, cx, cy, &s);", indent)
+		e("%s    }", indent)
+		e("%s    %s.store(cx, Ordering::Relaxed);", indent, dyn_end)
+		e("%s}", indent)
+		return
+	end
+
 	-- For active nodes, 'a' is already set; for non-active, set it below
 	local use_local_a = op.active_idx and op.active_atlas and op.active_atlas.fn_name ~= op.atlas.fn_name
 	if op.align == "left" then
