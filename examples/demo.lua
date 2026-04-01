@@ -33,9 +33,11 @@ local PLUS_MINUS = utf8char(0x00B1)  -- ±
 local MICRO      = utf8char(0x00B5)  -- µ
 local DEGREE     = utf8char(0x00B0)  -- °
 
+local extra = {0x00B1, 0x00B5, 0x00B0, 0x2212} -- ±, µ, °, −
+
 fonts = {
-	myriad_large = { "fonts/MyriadPro-Regular.ttf", 32 },
-	myriad_small = { "fonts/MyriadPro-Regular.ttf", 20 },
+	myriad_large = { "fonts/MyriadPro-Regular.ttf", 32, extra = extra },
+	myriad_small = { "fonts/MyriadPro-Regular.ttf", 20, extra = extra },
 	roboto_large = { "fonts/RobotoMono-Regular.ttf", 32 },
 	roboto_small = { "fonts/RobotoMono-Regular.ttf", 20 },
 	vga = { "raster::font_vga16", 12 },
@@ -541,12 +543,11 @@ menus.MidString = {"col",
    {"row", size = 50,
       multipart = {
          {"Hel", font = fonts.myriad_large, fg = colors.white},
-         {"lo", font = fonts.roboto_large, fg = colors.green},
-         {"Wor", font = fonts.myriad_large, fg = colors.yellow},
-         {"ld", font = fonts.roboto_large, fg = colors.red},
+         {"loWor", font = fonts.roboto_large, fg = colors.green},
+         {"ld", font = fonts.myriad_large, fg = colors.red},
       },
    },
-   {"Font changes happen mid-word to\nprove this is chained blitting,\nnot separate cells.", style = {border = {width = 0}}},
+   {"Font changes mid-word to prove\nthis is chained blitting, not\nseparate cells.", style = {border = {width = 0}}},
 }
 
 -- Ribbon color function: hue sweep from blue to red
@@ -575,11 +576,11 @@ menus.Widgets = {"col",
       {lbl = "parameter One", render = "progress bar",
        style = {pad = 10, fg = colors.green}},
    },
-   {"row", style = {pad = 20},
+   {"row",
       {"Slider:", weight = 0.25},
       {lbl = "parameter One", render = "pointer slider",
        ribbon = hue_ribbon,
-       style = {pad = 0, fg = colors.white}},
+       style = {pad = 4, fg = colors.white}},
    },
    {"Both track the same parameter.\nSlider: triangle above hue ribbon.", style = {border = {width = 0}}},
 }

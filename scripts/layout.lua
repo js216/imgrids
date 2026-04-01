@@ -1612,9 +1612,19 @@ for _, name in ipairs(menu_names) do
 					op.text_x, op.inner_w, y, line)
 			end
 		elseif op.kind == "multipart" then
-			-- Chain blit calls with different atlases
+			-- Chain blit calls with different atlases, centered in cell
 			e("    {")
-			e("        let mut cx = %d_usize;", op.text_x)
+			-- Compute total width
+			local tw_parts = {}
+			for _, seg in ipairs(op.segments) do
+				tw_parts[#tw_parts+1] = ("%s().text_width(%q)"):format(seg.atlas.fn_name, seg.text)
+			end
+			e("        let tw = %s;", table.concat(tw_parts, " + "))
+			if op.x > 0 then
+				e("        let mut cx = %d + (%d_usize.saturating_sub(tw)) / 2;", op.x, op.w)
+			else
+				e("        let mut cx = (%d_usize.saturating_sub(tw)) / 2;", op.w)
+			end
 			for i, seg in ipairs(op.segments) do
 				if i < #op.segments then
 					e("        cx = backend.blit(%s(), cx, %d, %q);", seg.atlas.fn_name, op.text_y, seg.text)
