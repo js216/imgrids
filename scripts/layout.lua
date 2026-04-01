@@ -2083,6 +2083,33 @@ if #all_active_ops > 0 then
 	e("")
 end
 
+-- emit label_bounds(): return pixel bounding box for a dynamic label in the current menu
+do
+	local entries = {}
+	for _, name in ipairs(menu_names) do
+		for _, op in ipairs(menu_ops[name]) do
+			if op.kind == "dynamic" and op.lbl then
+				entries[#entries+1] = { menu = name, lbl = op.lbl, x = op.x, y = op.y, w = op.w, h = op.h }
+			end
+		end
+	end
+	e("pub fn label_bounds(label: &str) -> Option<(usize, usize, usize, usize)> {")
+	if #entries > 0 then
+		e("    let menu = *CURRENT_MENU.lock().unwrap();")
+		e("    match (menu, label) {")
+		for _, ent in ipairs(entries) do
+			e("        (Some(Menu::%s), %q) => Some((%d, %d, %d, %d)),",
+				ent.menu, ent.lbl, ent.x, ent.y, ent.w, ent.h)
+		end
+		e("        _ => None,")
+		e("    }")
+	else
+		e("    None")
+	end
+	e("}")
+	e("")
+end
+
 io.write(table.concat(out, "\n"))
 io.write("\n")
 if warn_count > 0 then
