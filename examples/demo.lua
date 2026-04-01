@@ -344,9 +344,9 @@ menus = {
          {lbl = "parameter One"},
       },
       {lbl = "parameter Two", render = "progress bar",
-       style = {pad = 0, pad_left = 0, pad_right = 0, pad_bottom = 0, pad_top = 25,
+       style = {margin = 10, pad = 0, pad_left = 0, pad_right = 0, pad_bottom = 0, pad_top = 25,
                 fg = colors.green, bg = {40, 40, 40},
-                border = {width = 1, side = {"left", "bottom", "right"}}}},
+                border = {width = 2, color = colors.white, side = {"left", "bottom", "right"}}}},
    },
 
    Complex = {"col",

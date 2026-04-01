@@ -1614,14 +1614,17 @@ for _, name in ipairs(menu_names) do
 		elseif op.kind == "border" then
 			if op.side then
 				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
-				if op.side == "top" then
-					e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, w, t, c)
-				elseif op.side == "bottom" then
-					e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y + h - t, w, t, c)
-				elseif op.side == "left" then
-					e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, t, h, c)
-				elseif op.side == "right" then
-					e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
+				local sides = type(op.side) == "table" and op.side or {op.side}
+				for _, s in ipairs(sides) do
+					if s == "top" then
+						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, w, t, c)
+					elseif s == "bottom" then
+						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y + h - t, w, t, c)
+					elseif s == "left" then
+						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, t, h, c)
+					elseif s == "right" then
+						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
+					end
 				end
 			else
 				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
