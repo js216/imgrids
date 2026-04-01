@@ -197,6 +197,16 @@ impl Backend for Sdl2Backend {
                         y: y as usize,
                     });
                 }
+                sdl2::event::Event::KeyDown {
+                    keycode: Some(sdl2::keyboard::Keycode::Up), ..
+                } => {
+                    crate::push_key("up");
+                }
+                sdl2::event::Event::KeyDown {
+                    keycode: Some(sdl2::keyboard::Keycode::Down), ..
+                } => {
+                    crate::push_key("down");
+                }
                 _ => {}
             }
         }
