@@ -1193,6 +1193,11 @@ e("use std::sync::LazyLock;")
 e("static ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
 e("static LAST_DRAWN_ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
 e("")
+e("// Press coordinates: stored for callbacks that need click position")
+e("static PRESS_X: AtomicUsize = AtomicUsize::new(0);")
+e("static PRESS_RIGHT: AtomicUsize = AtomicUsize::new(0);")
+e("pub fn last_press() -> (usize, usize) { (PRESS_X.load(Ordering::Relaxed), PRESS_RIGHT.load(Ordering::Relaxed)) }")
+e("")
 
 -- Collect all progress bar and dynamic label ops globally and assign indices
 local all_prog_ops = {}
@@ -1667,6 +1672,10 @@ for _, name in ipairs(menu_names) do
 				local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
 				local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
 				e("            if %s*x < %d && %s*y < %d {", x_lo, op.x + op.w, y_lo, op.y + op.h)
+				if fn_name == "select_digit" then
+					e("                PRESS_X.store(*x, Ordering::Relaxed);")
+					e("                PRESS_RIGHT.store(%d, Ordering::Relaxed);", op.x + op.w)
+				end
 				if callbacks[fn_name] > 0 then
 					local args = {}
 					for i = 2, #op.press do
@@ -1911,6 +1920,10 @@ for _, name in ipairs(menu_names) do
 					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
 				end
 			end
+			-- Reset leaf dynamic op itself so its text redraws after bg fill
+			if op.kind == "dynamic" and op.dyn_idx then
+				e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", op.dyn_idx)
+			end
 			emit_border("                ", op.x, op.y, op.w, op.h, act_border)
 			e("            } else {")
 			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, bg)
@@ -1936,6 +1949,10 @@ for _, name in ipairs(menu_names) do
 				for _, dc in ipairs(dyn_ch) do
 					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
 				end
+			end
+			-- Reset leaf dynamic op itself so its text redraws after bg fill
+			if op.kind == "dynamic" and op.dyn_idx then
+				e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", op.dyn_idx)
 			end
 			emit_border("                ", op.x, op.y, op.w, op.h, op.normal_border)
 			e("            }")
