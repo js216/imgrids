@@ -423,9 +423,9 @@ menus = {
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
       border = {width = 2, color = colors.white},
-      {"[30/30] Popup Positioning",                                 size = 40, style = s_title},
+      {"[31/31] Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("ActiveStyle", "Hello"),
+      nav("MidString", "Hello"),
    },
 }
 
@@ -506,9 +506,9 @@ menus.Icons = {"col",
 }
 
 menus.ActiveStyle = {"col",
-   {"[29/30] Active Styling",                                     size = 40, style = s_title},
+   {"[29/31] Active Styling",                                     size = 40, style = s_title},
    {"active={border=...}: app-controlled\nstyle via set_active(text, bool).", size = 50, style = s_desc},
-   nav("Icons", "Popup"),
+   nav("Icons", "MidString"),
    {"row",
       {"Option A", weight = 1, press = {"action", "a"},
        active = {bg = {30, 80, 30}, border = {width = 2, color = colors.green}},
@@ -524,4 +524,20 @@ menus.ActiveStyle = {"col",
                 border = {width = 1, color = {100,100,100}}}},
    },
    {"Click a button to see the underline.\nApp calls set_active() to toggle.", style = {border = {width = 0}}},
+}
+
+menus.MidString = {"col",
+   {"[30/31] Mid-String Font/Color Change",                       size = 40, style = s_title},
+   {"blit() returns ending x, so chained\ncalls can change font/color mid-text.", size = 50, style = s_desc},
+   nav("ActiveStyle", "Popup"),
+   -- Row with segments in different fonts (rendered by app code, not transpiler)
+   {"row", size = 50,
+      {"Large+", weight = 1, style = {font = fonts.myriad_large, fg = colors.white}},
+      {"small", weight = 1, style = {font = fonts.myriad_small, fg = colors.yellow}},
+   },
+   {"row", size = 50,
+      {"Mono:", weight = 1, style = {font = fonts.roboto_large, fg = colors.green}},
+      {"Proportional", weight = 1, style = {font = fonts.myriad_large, fg = colors.white}},
+   },
+   {"The transpiler places each segment\nas its own cell. blit() chaining is\nfor app-level code (see Backend::blit).", style = {border = {width = 0}}},
 }
