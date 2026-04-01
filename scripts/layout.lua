@@ -1141,7 +1141,7 @@ if need_raster then
 	e("use imgrids::raster::RasterAtlas;")
 end
 if need_ttf then
-	e("use imgrids::ttf::TtfAtlas;")
+	e("use imgrids::prebaked::PrebakedAtlas;")
 end
 if #atlases > 0 then
 	e("use std::sync::OnceLock;")
@@ -1149,45 +1149,93 @@ end
 e("use std::sync::Mutex;")
 e("")
 
+-- Generate pre-baked font atlas data via Python script
+local ttf_atlases = {}
+for _, a in ipairs(atlases) do
+	if not is_raster(a.font) then
+		local spec = { id = a.varname:lower(), extra = a.extra }
+		if is_font_chain(a.font) then
+			spec.fonts = {}
+			for _, f in ipairs(a.font) do
+				spec.fonts[#spec.fonts+1] = {f[1], f[2]}
+			end
+		else
+			spec.fonts = {{a.font[1], a.font[2]}}
+		end
+		ttf_atlases[#ttf_atlases+1] = { spec = spec, atlas = a }
+	end
+end
+
+if #ttf_atlases > 0 then
+	-- Build JSON spec for the Python script
+	local json_parts = {}
+	for _, ta in ipairs(ttf_atlases) do
+		local s = ta.spec
+		local font_parts = {}
+		for _, f in ipairs(s.fonts) do
+			font_parts[#font_parts+1] = ('["%s", %d]'):format(f[1], f[2])
+		end
+		local extra_parts = {}
+		for _, cp in ipairs(s.extra) do
+			extra_parts[#extra_parts+1] = tostring(cp)
+		end
+		json_parts[#json_parts+1] = ('{"id": "%s", "fonts": [%s], "extra": [%s]}'):format(
+			s.id, table.concat(font_parts, ", "), table.concat(extra_parts, ", "))
+	end
+	local json_str = "[" .. table.concat(json_parts, ", ") .. "]"
+
+	-- Find the Python script relative to this script
+	local script_dir = debug.getinfo(1, "S").source:match("@?(.*)/") or "."
+	local py_script = script_dir .. "/gen_font_atlas.py"
+	-- Output binary files to a cache directory alongside the generated ui.rs
+	-- Use current working directory + target/font_cache
+	local cwd = io.popen("pwd"):read("*l")
+	local cache_dir = cwd .. "/target/font_cache"
+	local py_cmd = ("echo '%s' | python3 '%s' '%s'"):format(json_str, py_script, cache_dir)
+	local handle = io.popen(py_cmd, "r")
+	local prebaked_src = handle:read("*a")
+	local ok = handle:close()
+	if not ok then
+		io.stderr:write("ERROR: gen_font_atlas.py failed\n")
+		os.exit(1)
+	end
+
+	-- Emit the prebaked data as a module
+	e("#[allow(clippy::all)]")
+	e("mod prebaked_fonts {")
+	for line in prebaked_src:gmatch("[^\n]+") do
+		if line:match("^%s*$") then
+			e("")
+		else
+			e("    %s", line)
+		end
+	end
+	e("}")
+	e("")
+end
+
 -- Atlas statics and getters
 for _, a in ipairs(atlases) do
 	if is_raster(a.font) then
 		local name, gw, gh = resolve_raster_font(a.font)
-			e("static %s: OnceLock<RasterAtlas> = OnceLock::new();", a.varname)
-			e("fn %s() -> &'static RasterAtlas {", a.fn_name)
+		e("static %s: OnceLock<RasterAtlas> = OnceLock::new();", a.varname)
+		e("fn %s() -> &'static RasterAtlas {", a.fn_name)
 		e("    %s.get_or_init(|| RasterAtlas::new(", a.varname)
 		e("        &imgrids::fonts::%s::FONT, %d, %d, %s, %s,", name, gw, gh, rgb_lit(a.fg), rgb_lit(a.bg))
 		e("    ))")
 		e("}")
 	else
-			e("static %s: OnceLock<TtfAtlas> = OnceLock::new();", a.varname)
-			e("fn %s() -> &'static TtfAtlas {", a.fn_name)
-		-- Build extra codepoints array
-		local extra_str = "&[]"
-		if #a.extra > 0 then
-			local parts = {}
-			for _, cp in ipairs(a.extra) do
-				parts[#parts+1] = ("0x%04X"):format(cp)
-			end
-			extra_str = ("&[%s]"):format(table.concat(parts, ", "))
-		end
-		if is_font_chain(a.font) then
-			-- Font fallback chain: {{"path1", size}, {"path2", size}, ...}
-			local parts = {}
-			for _, f in ipairs(a.font) do
-				parts[#parts+1] = ("(%q, %d)"):format(f[1], f[2])
-			end
-			e("    %s.get_or_init(|| TtfAtlas::new(&[%s], %s, %s, %s)",
-				a.varname, table.concat(parts, ", "),
-				extra_str, rgb_lit(a.fg), rgb_lit(a.bg))
-			e("        .expect(%q))", a.font[1][1])
-		else
-			-- Single font: {"path", size}
-			e("    %s.get_or_init(|| TtfAtlas::new(&[(%q, %d)], %s, %s, %s)",
-				a.varname, a.font[1], a.font[2],
-				extra_str, rgb_lit(a.fg), rgb_lit(a.bg))
-			e("        .expect(%q))", a.font[1])
-		end
+		local vid = a.varname
+		e("static %s: OnceLock<PrebakedAtlas> = OnceLock::new();", a.varname)
+		e("fn %s() -> &'static PrebakedAtlas {", a.fn_name)
+		e("    %s.get_or_init(|| PrebakedAtlas::from_alpha(", a.varname)
+		e("        prebaked_fonts::%s_CELL_H,", vid)
+		e("        &prebaked_fonts::%s_ASCII_ADV,", vid)
+		e("        &prebaked_fonts::%s_ASCII_OFF,", vid)
+		e("        prebaked_fonts::%s_EXT,", vid)
+		e("        prebaked_fonts::%s_ALPHA,", vid)
+		e("        %s, %s,", rgb_lit(a.fg), rgb_lit(a.bg))
+		e("    ))")
 		e("}")
 	end
 	e("")
