@@ -1258,6 +1258,27 @@ for _, name in ipairs(menu_names) do
 		end
 	end
 end
+-- Collect set_stay buttons for auto-active: when param changes, auto-activate matching button
+-- Groups: menu -> param -> [{value, active_idx}]
+local auto_active = {}  -- [menu][param] = {{value, idx}, ...}
+for _, name in ipairs(menu_names) do
+	auto_active[name] = {}
+	for _, op in ipairs(menu_ops[name]) do
+		if op.press and (op.press[1] == "set_stay" or op.press[1] == "set_param") and op.active_idx then
+			local param = op.press[2]
+			local value = op.press[3]
+			if param and value then
+				if not auto_active[name][param] then
+					auto_active[name][param] = {}
+				end
+				auto_active[name][param][#auto_active[name][param]+1] = {
+					value = value, idx = op.active_idx
+				}
+			end
+		end
+	end
+end
+
 local need_atomics = #all_prog_ops + #all_dyn_ops > 0
 if need_atomics then
 	e("use std::sync::atomic::{AtomicUsize, Ordering};")
@@ -1714,8 +1735,13 @@ for _, name in ipairs(menu_names) do
 	end
 	local fops = get_focusable_ops(ops)
 
-	local be_param = (#dyn_ops + #prog_ops + #fops) > 0 and "backend" or "_backend"
-	local chg_param = (#dyn_ops + #prog_ops) > 0 and "changes" or "_changes"
+	local aa = auto_active[name]
+	local aa_params = {}
+	for param in pairs(aa) do aa_params[#aa_params+1] = param end
+	table.sort(aa_params)
+	local has_auto_active = #aa_params > 0
+	local be_param = (#dyn_ops + #prog_ops + #fops + (has_auto_active and 1 or 0)) > 0 and "backend" or "_backend"
+	local chg_param = (#dyn_ops + #prog_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
 	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	if #dyn_ops > 0 then
@@ -1850,6 +1876,27 @@ for _, name in ipairs(menu_names) do
 			end
 		end
 		e("        }")
+		e("    }")
+	end
+
+	-- Auto-activate set_stay/set_param buttons BEFORE active state redraw
+	if has_auto_active then
+		e("    for &(name, val) in changes {")
+		for _, param in ipairs(aa_params) do
+			local group = aa[param]
+			e("        if name == %q {", param)
+			e("            let mut set = ACTIVE.lock().unwrap();")
+			for _, entry in ipairs(group) do
+				e("            set.remove(&%d);", entry.idx)
+			end
+			e("            match val {")
+			for _, entry in ipairs(group) do
+				e("                %q => { set.insert(%d); }", entry.value, entry.idx)
+			end
+			e("                _ => {}")
+			e("            }")
+			e("        }")
+		end
 		e("    }")
 	end
 
@@ -2081,6 +2128,47 @@ if #all_active_ops > 0 then
 	e("    ACTIVE.lock().unwrap().clear();")
 	e("}")
 	e("")
+end
+
+-- emit init_auto_active(): set active state for auto-active buttons based on current values
+do
+	local has_any = false
+	for _, name in ipairs(menu_names) do
+		if next(auto_active[name]) then has_any = true; break end
+	end
+	if has_any then
+		e("pub fn init_auto_active(values: &[(&str, &str)]) {")
+		e("    let menu = *CURRENT_MENU.lock().unwrap();")
+		e("    let mut set = ACTIVE.lock().unwrap();")
+		for _, name in ipairs(menu_names) do
+			local aa = auto_active[name]
+			local aa_params = {}
+			for param in pairs(aa) do aa_params[#aa_params+1] = param end
+			table.sort(aa_params)
+			if #aa_params > 0 then
+				e("    if menu == Some(Menu::%s) {", name)
+				e("        for &(name, val) in values {")
+				for _, param in ipairs(aa_params) do
+					local group = aa[param]
+					e("            if name == %q {", param)
+					for _, entry in ipairs(group) do
+						e("                set.remove(&%d);", entry.idx)
+					end
+					e("                match val {")
+					for _, entry in ipairs(group) do
+						e("                    %q => { set.insert(%d); }", entry.value, entry.idx)
+					end
+					e("                    _ => {}")
+					e("                }")
+					e("            }")
+				end
+				e("        }")
+				e("    }")
+			end
+		end
+		e("}")
+		e("")
+	end
 end
 
 -- emit label_bounds(): return pixel bounding box for a dynamic label in the current menu
