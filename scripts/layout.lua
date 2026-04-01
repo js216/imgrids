@@ -2201,11 +2201,19 @@ end
 -- emit format_param(): built-in enum and numeric formatting from params.txt metadata
 do
 	-- Collect params that have formatting metadata and are used as dynamic labels
+	-- or as sources for derived labels
 	local used_params = {}
 	for _, name in ipairs(menu_names) do
 		for _, op in ipairs(menu_ops[name]) do
 			if op.kind == "dynamic" and op.lbl and param_info[op.lbl] and not op.fmt then
 				used_params[op.lbl] = true
+			end
+			if op.derived then
+				for _, src in ipairs(op.derived.sources) do
+					if param_info[src] then
+						used_params[src] = true
+					end
+				end
 			end
 		end
 	end
