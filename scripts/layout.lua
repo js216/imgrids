@@ -1371,11 +1371,35 @@ if need_atomics then
 	e("")
 end
 
--- Derived label statics: store last raw value per constituent param
+-- Derived label statics: store last value per constituent param
+-- Initialize with formatted default values from params.txt so derived labels render on first frame
 if #all_derived_ops > 0 then
 	for _, op in ipairs(all_derived_ops) do
 		for j, src in ipairs(op.derived.sources) do
-			e("static DERIVED_%d_%d: Mutex<String> = Mutex::new(String::new());", op.derived_idx, j)
+			local default = ""
+			if type(params) == "table" then
+				for _, p in ipairs(params) do
+					if p.name == src and p.default ~= nil then
+						-- Use formatted default: for enums, look up option name
+						if p.opts and type(p.default) == "number" then
+							local idx = p.default + 1 -- Lua is 1-indexed
+							if p.opts[idx] then
+								default = p.opts[idx]
+							else
+								default = tostring(p.default)
+							end
+						else
+							default = tostring(p.default)
+						end
+						break
+					end
+				end
+			end
+			if default ~= "" then
+				e("static DERIVED_%d_%d: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(%q.to_owned()));", op.derived_idx, j, default)
+			else
+				e("static DERIVED_%d_%d: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));", op.derived_idx, j)
+			end
 		end
 	end
 	e("")
@@ -1845,8 +1869,9 @@ for _, name in ipairs(menu_names) do
 		for _, src in ipairs(op.derived.sources) do
 			src_checks[#src_checks+1] = ("n == %q"):format(src)
 		end
+		local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
 		e("    {")
-		e("        let mut dirty = false;")
+		e("        let mut dirty = %s.load(Ordering::Relaxed) == usize::MAX;", dyn_end)
 		e("        for &(n, v) in changes {")
 		for j, src in ipairs(op.derived.sources) do
 			e("            if n == %q { *DERIVED_%d_%d.lock().unwrap() = v.to_owned(); dirty = true; }", src, op.derived_idx, j)
@@ -1859,10 +1884,10 @@ for _, name in ipairs(menu_names) do
 			e("            let idx: usize = DERIVED_%d_1.lock().unwrap().parse().unwrap_or(0);", op.derived_idx)
 			e("            let val = \"\\u{00B7}\".repeat(idx + 1);")
 		elseif op.derived.sep then
-			-- Join formatted constituent values with separator
+			-- Join constituent values with separator (values are already formatted by format_values)
 			local parts = {}
 			for j, src in ipairs(op.derived.sources) do
-				parts[#parts+1] = ("format_param(%q, &DERIVED_%d_%d.lock().unwrap()).unwrap_or_default()"):format(src, op.derived_idx, j)
+				parts[#parts+1] = ("DERIVED_%d_%d.lock().unwrap().clone()"):format(op.derived_idx, j)
 			end
 			e("            let val = [%s].join(%q);", table.concat(parts, ", "), op.derived.sep)
 		end
