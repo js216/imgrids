@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, font=1, fg=1, dim=1, colors=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, font=1, fg=1, dim=1, dim_zeros=1, colors=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -650,7 +650,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		end
 	else
 		-- Leaf node
-		local lbl, render, press, fmt, adjust, overload, active_style, active_id, bidir, derived
+		local lbl, render, press, fmt, adjust, overload, active_style, active_id, bidir, derived, dim_zeros
 		local text
 		local icon_path
 
@@ -667,6 +667,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 			active_id = node.active_id
 			icon_path = node.icon
 			bidir = node.bidir
+			dim_zeros = node.dim_zeros
 			if node.derived then
 				derived = { sources = node.derived, sep = node.derived_sep, fn_name = node.derived_fn }
 			end
@@ -982,6 +983,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					active_style = active_style,
 					active_id = active_id or (active_style and text),
 					derived = derived,
+					dim_zeros = dim_zeros,
 				}
 			end
 		elseif text then
