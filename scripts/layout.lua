@@ -2233,6 +2233,14 @@ for _, name in ipairs(menu_names) do
 			e("            match val {")
 			for _, entry in ipairs(group) do
 				e("                %q => { set.insert(%d); }", entry.value, entry.idx)
+				-- Also match formatted enum name so auto-active works after format_values
+				local info = param_info[param]
+				if info and info.opts then
+					local idx = tonumber(entry.value)
+					if idx and info.opts[idx + 1] and info.opts[idx + 1] ~= entry.value then
+						e("                %q => { set.insert(%d); }", info.opts[idx + 1], entry.idx)
+					end
+				end
 			end
 			e("                _ => {}")
 			e("            }")
@@ -2597,6 +2605,14 @@ do
 					e("                match val {")
 					for _, entry in ipairs(group) do
 						e("                    %q => { set.insert(%d); }", entry.value, entry.idx)
+						-- Also match formatted enum name
+						local info = param_info[param]
+						if info and info.opts then
+							local idx = tonumber(entry.value)
+							if idx and info.opts[idx + 1] and info.opts[idx + 1] ~= entry.value then
+								e("                    %q => { set.insert(%d); }", info.opts[idx + 1], entry.idx)
+							end
+						end
 					end
 					e("                    _ => {}")
 					e("                }")
