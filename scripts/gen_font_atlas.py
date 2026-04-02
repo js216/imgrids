@@ -13,7 +13,9 @@ No external Python packages required.
 
 import ctypes
 import ctypes.util
+import hashlib
 import json
+import os
 import sys
 import struct
 
@@ -288,25 +290,37 @@ def render_atlas(ft_ctx, font_specs, extra_cps, cell_h_hint):
     return cell_h, ascii_adv, ascii_off, ext_entries, bytes(alpha_buf)
 
 
-def emit_binary_and_rust(atlases, out_dir, out=sys.stdout):
-    """Write binary alpha files and Rust source with metadata.
+def save_atlas_cache(out_dir, atlas_id, h, cell_h, ascii_adv, ascii_off, ext, alpha):
+    """Save atlas data and metadata to cache files."""
+    alpha_path = os.path.join(out_dir, f"{atlas_id}_{h}.alpha")
+    meta_path = os.path.join(out_dir, f"{atlas_id}_{h}.meta")
+    with open(alpha_path, "wb") as f:
+        f.write(alpha)
+    with open(meta_path, "w") as f:
+        json.dump({"cell_h": cell_h, "ascii_adv": ascii_adv,
+                    "ascii_off": ascii_off, "ext": ext}, f)
+    return alpha_path
 
-    Binary files: {out_dir}/{atlas_id}.alpha
-    Rust source: written to stdout, references the binary files via include_bytes!
-    """
-    import os
-    os.makedirs(out_dir, exist_ok=True)
 
+def load_atlas_cache(out_dir, atlas_id, h):
+    """Load atlas metadata from cache. Returns (cell_h, ascii_adv, ascii_off, ext, alpha_path) or None."""
+    alpha_path = os.path.join(out_dir, f"{atlas_id}_{h}.alpha")
+    meta_path = os.path.join(out_dir, f"{atlas_id}_{h}.meta")
+    if not os.path.exists(alpha_path) or not os.path.exists(meta_path):
+        return None
+    with open(meta_path) as f:
+        meta = json.load(f)
+    return (meta["cell_h"], meta["ascii_adv"], meta["ascii_off"],
+            [tuple(e) for e in meta["ext"]], alpha_path)
+
+
+def emit_rust(atlases, out=sys.stdout):
+    """Write Rust source with metadata, referencing cached alpha files."""
     out.write("// Auto-generated font atlas metadata. Do not edit.\n")
     out.write("// Re-run gen_font_atlas.py to update.\n\n")
 
-    for atlas_id, (cell_h, ascii_adv, ascii_off, ext, alpha) in atlases:
+    for atlas_id, cell_h, ascii_adv, ascii_off, ext, alpha_path in atlases:
         uid = atlas_id.upper()
-        # Write binary alpha data
-        alpha_path = os.path.join(out_dir, f"{atlas_id}.alpha")
-        with open(alpha_path, "wb") as f:
-            f.write(alpha)
-
         out.write(f"pub const {uid}_CELL_H: usize = {cell_h};\n")
         out.write(f"pub const {uid}_ASCII_ADV: [usize; 128] = {list(ascii_adv)};\n")
         out.write(f"pub const {uid}_ASCII_OFF: [usize; 128] = {list(ascii_off)};\n")
@@ -317,9 +331,26 @@ def emit_binary_and_rust(atlases, out_dir, out=sys.stdout):
         else:
             out.write(f"pub const {uid}_EXT: &[(u32, usize, usize)] = &[];\n")
 
-        # Reference binary file via include_bytes!
         out.write(f'pub const {uid}_ALPHA: &[u8] = include_bytes!("{alpha_path}");\n')
         out.write("\n")
+
+
+def atlas_hash(spec):
+    """Compute a short hash of atlas properties for cache invalidation."""
+    # Include font file contents (via mtime+size as proxy), sizes, and extra codepoints
+    h = hashlib.sha256()
+    for f in spec["fonts"]:
+        path, size = f[0], f[1]
+        h.update(path.encode())
+        h.update(struct.pack("<I", size))
+        try:
+            st = os.stat(path)
+            h.update(struct.pack("<QQ", int(st.st_mtime * 1000), st.st_size))
+        except OSError:
+            pass
+    for cp in sorted(spec.get("extra", [])):
+        h.update(struct.pack("<I", cp))
+    return h.hexdigest()[:12]
 
 
 def main():
@@ -330,17 +361,35 @@ def main():
     out_dir = sys.argv[1]
 
     specs = json.loads(sys.stdin.read())
-    ft = FreeType()
-    atlases = []
+    os.makedirs(out_dir, exist_ok=True)
+
+    ft = None
+    result_list = []  # [(atlas_id, cell_h, ascii_adv, ascii_off, ext, alpha_path)]
     for spec in specs:
         atlas_id = spec["id"]
         font_specs = [(f[0], f[1]) for f in spec["fonts"]]
         extra = spec.get("extra", [])
         cell_h = font_specs[0][1]
-        result = render_atlas(ft, font_specs, extra, cell_h)
-        atlases.append((atlas_id, result))
-        print(f"  {atlas_id}: {len(result[4])} bytes, {cell_h}px", file=sys.stderr)
-    emit_binary_and_rust(atlases, out_dir)
+        h = atlas_hash(spec)
+
+        cached = load_atlas_cache(out_dir, atlas_id, h)
+        if cached:
+            c_cell_h, c_adv, c_off, c_ext, c_path = cached
+            result_list.append((atlas_id, c_cell_h, c_adv, c_off, c_ext, c_path))
+            print(f"  {atlas_id}: cached", file=sys.stderr)
+        else:
+            # Remove old cached files for this atlas
+            for f in os.listdir(out_dir):
+                if f.startswith(f"{atlas_id}_") and (f.endswith(".alpha") or f.endswith(".meta")):
+                    os.remove(os.path.join(out_dir, f))
+            if ft is None:
+                ft = FreeType()
+            r_cell_h, r_adv, r_off, r_ext, r_alpha = render_atlas(ft, font_specs, extra, cell_h)
+            alpha_path = save_atlas_cache(out_dir, atlas_id, h, r_cell_h, r_adv, r_off, r_ext, r_alpha)
+            result_list.append((atlas_id, r_cell_h, r_adv, r_off, r_ext, alpha_path))
+            print(f"  {atlas_id}: {len(r_alpha)} bytes, {cell_h}px", file=sys.stderr)
+
+    emit_rust(result_list)
 
 
 if __name__ == "__main__":
