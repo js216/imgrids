@@ -958,6 +958,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					lbl = lbl,
 					fg = s.fg,
 					bg = s.bg,
+					press = press,
 					is_focusable = is_focusable,
 					focus_index = focus_index,
 					foc = foc,
