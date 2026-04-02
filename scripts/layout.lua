@@ -1475,6 +1475,7 @@ if need_atomics then
 	end
 	for i, op in ipairs(all_chart_ops) do
 		e("static CHART_%d_DATA: Mutex<Vec<f64>> = Mutex::new(Vec::new());", i)
+		e("static CHART_%d_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);", i)
 	end
 	e("")
 end
@@ -1587,7 +1588,7 @@ for i = 1, #all_slider_ops do
 	e("        SLIDER_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
 end
 for i = 1, #all_chart_ops do
-	e("        CHART_%d_DATA.lock().unwrap().clear();", i)
+	e("        CHART_%d_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);", i)
 end
 for i = 1, #all_dyn_ops do
 	e("        DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", i)
@@ -2229,50 +2230,57 @@ for _, name in ipairs(menu_names) do
 		e("    }")
 	end
 
-	-- Chart widget updates
+	-- Chart widget updates: push new data, then redraw if dirty or new data
 	local menu_charts = {}
 	for _, op in ipairs(ops) do
 		if op.kind == "chart" then menu_charts[#menu_charts+1] = op end
 	end
 	if #menu_charts > 0 then
+		-- Push new data from changes
 		e("    for &(name, val) in changes {")
 		for _, op in ipairs(menu_charts) do
-			local fg = rgb_lit(op.fg)
-			local bg = rgb_lit(op.bg)
 			e("        if name == %q {", op.lbl)
 			e("            if let Ok(v) = val.parse::<f64>() {")
 			e("                let mut data = CHART_%d_DATA.lock().unwrap();", op.chart_idx)
 			e("                data.push(v);")
 			e("                let max_pts = %d_usize;", op.cw)
 			e("                if data.len() > max_pts { let excess = data.len() - max_pts; data.drain(..excess); }")
-			-- Auto-scale Y and redraw
-			e("                let bg = %s;", bg)
-			e("                let fg = %s;", fg)
-			e("                backend.fill_rect(%d, %d, %d, %d, bg);", op.cx, op.cy, op.cw, op.ch)
-			e("                let visible = data.len().min(%d);", op.cw)
-			e("                if visible > 0 {")
-			e("                    let start = data.len() - visible;")
-			e("                    let mut min_v = f64::MAX;")
-			e("                    let mut max_v = f64::MIN;")
-			e("                    for i in start..data.len() { min_v = min_v.min(data[i]); max_v = max_v.max(data[i]); }")
-			e("                    let range = max_v - min_v;")
-			e("                    if range < 1e-15 { min_v -= 1.0; max_v += 1.0; }")
-			e("                    else { min_v -= range * 0.1; max_v += range * 0.1; }")
-			e("                    let draw_h = %d_usize;", op.ch)
-			e("                    let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
-			e("                    for i in 0..visible {")
-			e("                        let v = data[start + i];")
-			e("                        let norm = ((v - min_v) * scale) as usize;")
-			e("                        let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
-			e("                        let bar_h = (%d + draw_h - py).max(1);", op.cy)
-			e("                        let px = %d + %d - visible + i;", op.cx, op.cw)
-			e("                        backend.fill_rect(px, py, 1, bar_h, fg);")
-			e("                    }")
-			e("                }")
+			e("                CHART_%d_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);", op.chart_idx)
 			e("            }")
 			e("        }")
 		end
 		e("    }")
+		-- Redraw dirty charts from existing data
+		for _, op in ipairs(menu_charts) do
+			local fg = rgb_lit(op.fg)
+			local bg = rgb_lit(op.bg)
+			e("    if CHART_%d_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed) {", op.chart_idx)
+			e("        let data = CHART_%d_DATA.lock().unwrap();", op.chart_idx)
+			e("        let bg = %s;", bg)
+			e("        let fg = %s;", fg)
+			e("        backend.fill_rect(%d, %d, %d, %d, bg);", op.cx, op.cy, op.cw, op.ch)
+			e("        let visible = data.len().min(%d);", op.cw)
+			e("        if visible > 0 {")
+			e("            let start = data.len() - visible;")
+			e("            let mut min_v = f64::MAX;")
+			e("            let mut max_v = f64::MIN;")
+			e("            for i in start..data.len() { min_v = min_v.min(data[i]); max_v = max_v.max(data[i]); }")
+			e("            let range = max_v - min_v;")
+			e("            if range < 1e-15 { min_v -= 1.0; max_v += 1.0; }")
+			e("            else { min_v -= range * 0.1; max_v += range * 0.1; }")
+			e("            let draw_h = %d_usize;", op.ch)
+			e("            let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
+			e("            for i in 0..visible {")
+			e("                let v = data[start + i];")
+			e("                let norm = ((v - min_v) * scale) as usize;")
+			e("                let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
+			e("                let bar_h = (%d + draw_h - py).max(1);", op.cy)
+			e("                let px = %d + %d - visible + i;", op.cx, op.cw)
+			e("                backend.fill_rect(px, py, 1, bar_h, fg);")
+			e("            }")
+			e("        }")
+			e("    }")
+		end
 	end
 
 	if #fops > 0 then
