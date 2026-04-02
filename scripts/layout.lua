@@ -944,6 +944,25 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					foc = foc,
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
+			elseif render == "chart" then
+				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
+				local inset_t = eff_pad(s, "top") + border_inset(s, "top")
+				local inset_r = eff_pad(s, "right") + border_inset(s, "right")
+				local inset_b = eff_pad(s, "bottom") + border_inset(s, "bottom")
+				local cw = math.max(0, w - inset_l - inset_r)
+				local ch = math.max(0, h - inset_t - inset_b)
+				ops[#ops + 1] = {
+					kind = "chart",
+					x = x, y = y, w = w, h = h,
+					cx = x + inset_l, cy = y + inset_t, cw = cw, ch = ch,
+					lbl = lbl,
+					fg = s.fg,
+					bg = s.bg,
+					is_focusable = is_focusable,
+					focus_index = focus_index,
+					foc = foc,
+					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
+				}
 			elseif render == "pointer slider" then
 				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
 				local inset_t = eff_pad(s, "top") + border_inset(s, "top")
@@ -1342,8 +1361,9 @@ local all_prog_ops = {}
 local all_dyn_ops = {}
 local all_active_ops = {}
 local all_slider_ops = {}
+local all_chart_ops = {}
 
--- First pass: collect prog/dyn/slider ops and container_active ops
+-- First pass: collect prog/dyn/slider/chart ops and container_active ops
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
@@ -1353,6 +1373,10 @@ for _, name in ipairs(menu_names) do
 		if op.kind == "slider" then
 			all_slider_ops[#all_slider_ops+1] = op
 			op.slider_idx = #all_slider_ops
+		end
+		if op.kind == "chart" then
+			all_chart_ops[#all_chart_ops+1] = op
+			op.chart_idx = #all_chart_ops
 		end
 		if op.kind == "dynamic" then
 			all_dyn_ops[#all_dyn_ops+1] = op
@@ -1431,7 +1455,7 @@ for _, name in ipairs(menu_names) do
 	end
 end
 
-local need_atomics = #all_prog_ops + #all_dyn_ops + #all_slider_ops > 0
+local need_atomics = #all_prog_ops + #all_dyn_ops + #all_slider_ops + #all_chart_ops > 0
 if need_atomics then
 	e("use std::sync::atomic::{AtomicUsize, Ordering};")
 	for i = 1, #all_prog_ops do
@@ -1448,6 +1472,9 @@ if need_atomics then
 			parts[#parts+1] = rgb_lit(c)
 		end
 		e("static SLIDER_%d_RIBBON: &[imgrids::Pixel] = &[%s];", i, table.concat(parts, ", "))
+	end
+	for i, op in ipairs(all_chart_ops) do
+		e("static CHART_%d_DATA: Mutex<Vec<f64>> = Mutex::new(Vec::new());", i)
 	end
 	e("")
 end
@@ -1559,6 +1586,9 @@ end
 for i = 1, #all_slider_ops do
 	e("        SLIDER_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
 end
+for i = 1, #all_chart_ops do
+	e("        CHART_%d_DATA.lock().unwrap().clear();", i)
+end
 for i = 1, #all_dyn_ops do
 	e("        DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", i)
 end
@@ -1619,7 +1649,7 @@ for _, name in ipairs(menu_names) do
 				emit_static_blit("    ", op.atlas.fn_name, op.align,
 					op.text_x, op.inner_w, y, line)
 			end
-		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" then
+		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" or op.kind == "chart" then
 			local bg = op.atlas and op.atlas.bg or op.bg
 			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
 		elseif op.kind == "fill" then
@@ -1658,7 +1688,7 @@ end
 local function get_focusable_ops(ops)
 	local raw = {}
 	for _, op in ipairs(ops) do
-		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress" or op.kind == "icon") and op.is_focusable then
+		if (op.kind == "static" or op.kind == "dynamic" or op.kind == "progress" or op.kind == "icon" or op.kind == "chart") and op.is_focusable then
 			raw[#raw + 1] = op
 		end
 	end
@@ -1829,6 +1859,9 @@ for _, name in ipairs(menu_names) do
 				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 				-- Force progress bar redraw
 				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			elseif op.kind == "chart" then
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
 			elseif op.kind == "icon" then
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
 				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
@@ -1851,6 +1884,9 @@ for _, name in ipairs(menu_names) do
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
 				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+			elseif op.kind == "chart" then
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
 			elseif op.kind == "icon" then
 				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
 				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
@@ -1974,12 +2010,16 @@ for _, name in ipairs(menu_names) do
 	local ops = menu_ops[name]
 	local dyn_ops = {}
 	local prog_ops = {}
+	local chart_ops = {}
 	for _, op in ipairs(ops) do
 		if op.kind == "dynamic" then
 			dyn_ops[#dyn_ops + 1] = op
 		end
 		if op.kind == "progress" then
 			prog_ops[#prog_ops + 1] = op
+		end
+		if op.kind == "chart" then
+			chart_ops[#chart_ops + 1] = op
 		end
 	end
 	local fops = get_focusable_ops(ops)
@@ -1989,8 +2029,9 @@ for _, name in ipairs(menu_names) do
 	for param in pairs(aa) do aa_params[#aa_params+1] = param end
 	table.sort(aa_params)
 	local has_auto_active = #aa_params > 0
-	local be_param = (#dyn_ops + #prog_ops + #fops + (has_auto_active and 1 or 0)) > 0 and "backend" or "_backend"
-	local chg_param = (#dyn_ops + #prog_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
+	local has_content = #dyn_ops + #prog_ops + #chart_ops + #fops + (has_auto_active and 1 or 0)
+	local be_param = has_content > 0 and "backend" or "_backend"
+	local chg_param = (#dyn_ops + #prog_ops + #chart_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
 	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	-- Derived labels: watch constituent params and rebuild
@@ -2183,6 +2224,52 @@ for _, name in ipairs(menu_names) do
 					end
 				end
 			end
+			e("        }")
+		end
+		e("    }")
+	end
+
+	-- Chart widget updates
+	local menu_charts = {}
+	for _, op in ipairs(ops) do
+		if op.kind == "chart" then menu_charts[#menu_charts+1] = op end
+	end
+	if #menu_charts > 0 then
+		e("    for &(name, val) in changes {")
+		for _, op in ipairs(menu_charts) do
+			local fg = rgb_lit(op.fg)
+			local bg = rgb_lit(op.bg)
+			e("        if name == %q {", op.lbl)
+			e("            if let Ok(v) = val.parse::<f64>() {")
+			e("                let mut data = CHART_%d_DATA.lock().unwrap();", op.chart_idx)
+			e("                data.push(v);")
+			e("                let max_pts = %d_usize;", op.cw)
+			e("                if data.len() > max_pts { let excess = data.len() - max_pts; data.drain(..excess); }")
+			-- Auto-scale Y and redraw
+			e("                let bg = %s;", bg)
+			e("                let fg = %s;", fg)
+			e("                backend.fill_rect(%d, %d, %d, %d, bg);", op.cx, op.cy, op.cw, op.ch)
+			e("                let visible = data.len().min(%d);", op.cw)
+			e("                if visible > 0 {")
+			e("                    let start = data.len() - visible;")
+			e("                    let mut min_v = f64::MAX;")
+			e("                    let mut max_v = f64::MIN;")
+			e("                    for i in start..data.len() { min_v = min_v.min(data[i]); max_v = max_v.max(data[i]); }")
+			e("                    let range = max_v - min_v;")
+			e("                    if range < 1e-15 { min_v -= 1.0; max_v += 1.0; }")
+			e("                    else { min_v -= range * 0.1; max_v += range * 0.1; }")
+			e("                    let draw_h = %d_usize;", op.ch)
+			e("                    let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
+			e("                    for i in 0..visible {")
+			e("                        let v = data[start + i];")
+			e("                        let norm = ((v - min_v) * scale) as usize;")
+			e("                        let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
+			e("                        let bar_h = (%d + draw_h - py).max(1);", op.cy)
+			e("                        let px = %d + %d - visible + i;", op.cx, op.cw)
+			e("                        backend.fill_rect(px, py, 1, bar_h, fg);")
+			e("                    }")
+			e("                }")
+			e("            }")
 			e("        }")
 		end
 		e("    }")

@@ -560,21 +560,20 @@ local function hue_ribbon(t)
 end
 
 menus.Widgets = {"col",
-   {"[31/34] Widgets: Progress Bar + Slider",                    size = 40, style = s_title},
-   {"render=\"progress bar\" and\nrender=\"pointer slider\" (with ribbon=).", size = 50, style = s_desc},
+   {"[31/34] Widgets: Progress Bar + Slider + Chart",            size = 40, style = s_title},
+   {"render=\"progress bar\", \"pointer slider\", \"chart\".",   size = 30, style = s_desc},
    nav("MidString", "RightAlign"),
    {"row",
-      {"Progress:", weight = 0.25},
-      {lbl = "parameter One", render = "progress bar",
-       style = {pad = 10, fg = colors.green}},
+      {"col", weight = 0.5,
+         {lbl = "parameter One", render = "progress bar",
+          style = {pad = 10, fg = colors.green}},
+         {lbl = "parameter One", render = "pointer slider",
+          ribbon = hue_ribbon,
+          style = {pad = 4, fg = colors.white}},
+      },
+      {lbl = "parameter Three", render = "chart", weight = 0.5,
+       style = {pad = 4, fg = {120, 180, 120}}},
    },
-   {"row",
-      {"Slider:", weight = 0.25},
-      {lbl = "parameter One", render = "pointer slider",
-       ribbon = hue_ribbon,
-       style = {pad = 4, fg = colors.white}},
-   },
-   {"Both track the same parameter.\nSlider: triangle above hue ribbon.", style = {border = {width = 0}}},
 }
 
 local MINUS_SIGN = utf8char(0x2212)
