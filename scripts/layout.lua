@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, font=1, fg=1, dim=1, dim_zeros=1, colors=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, pointer_weight=1, font=1, fg=1, dim=1, dim_zeros=1, colors=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -965,6 +965,11 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
 			elseif render == "pointer slider" then
+				local pw = node.pointer_weight or 0.5
+				if pw < 0.0 or pw > 1.0 then
+					warn("pointer_weight %.2f out of range [0.0, 1.0], clamping", pw)
+					pw = math.max(0.0, math.min(1.0, pw))
+				end
 				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
 				local inset_t = eff_pad(s, "top") + border_inset(s, "top")
 				local inset_r = eff_pad(s, "right") + border_inset(s, "right")
@@ -987,6 +992,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					fg = s.fg,
 					bg = s.bg,
 					ribbon = ribbon_colors,
+					pointer_weight = pw,
 					is_focusable = is_focusable,
 					focus_index = focus_index,
 					foc = foc,
@@ -2188,8 +2194,8 @@ for _, name in ipairs(menu_names) do
 	if #slider_ops > 0 then
 		e("    for &(name, val) in changes {")
 		for _, op in ipairs(slider_ops) do
-			local tri_h = math.floor(op.sh / 2)  -- triangle takes top half
-			local ribbon_h = op.sh - tri_h        -- ribbon takes bottom half
+			local tri_h = math.floor(op.sh * op.pointer_weight)  -- triangle size based on pointer_weight
+			local ribbon_h = op.sh - tri_h        -- ribbon takes remaining space
 			local tri_w = tri_h * 2 + 1           -- triangle width based on height
 			local ribbon_y = op.sy + tri_h        -- ribbon below triangle
 			local bg = rgb_lit(op.bg)

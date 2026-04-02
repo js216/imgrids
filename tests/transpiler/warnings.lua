@@ -25,6 +25,10 @@ menus = {
         {lbl = "too_many", colors = {                         -- (10) >9 alternate styles
             {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},
             {0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0}}},
+        {lbl = "bad_pw_neg", ribbon = function(t) return {0,0,0} end,  -- (11) pointer_weight < 0
+         pointer_weight = -0.1, size = 20},
+        {lbl = "bad_pw_high", ribbon = function(t) return {0,0,0} end, -- (12) pointer_weight > 1
+         pointer_weight = 1.5, size = 20},
     },
     -- (6) text exceeds screen bounds: tall fixed child leaves only 10px
     -- for the last child, but the 16px font can't fit, overflows screen

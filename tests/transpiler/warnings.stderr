@@ -10,4 +10,6 @@ WARNING: unknown key 'blah' in node
 WARNING: unknown key 'size' in style=
 WARNING: unknown key 'radius' in border=
 WARNING: colors= has 10 entries but max is 9 (\x01-\x09) on label "too_many"
+WARNING: pointer_weight -0.10 out of range [0.0, 1.0], clamping
+WARNING: pointer_weight 1.50 out of range [0.0, 1.0], clamping
 WARNING: unknown raster font 'raster::font_vga17', falling back to font_vga16 at size 32
