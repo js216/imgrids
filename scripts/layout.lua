@@ -2067,15 +2067,22 @@ for _, name in ipairs(menu_names) do
 			e("        if name == %q {", op.lbl)
 			if op.bidir then
 				-- Bidirectional bar: value "s-0.5" = symmetric at -0.5, "0.3" = standard at 0.3
-				local fg = rgb_lit(op.fg)
 				local bg = rgb_lit(op.bg)
+				e("            let (sym, v_raw) = if let Some(s) = val.strip_prefix('s') {")
+				e("                (true, s.parse::<f32>().unwrap_or(0.0))")
+				e("            } else {")
+				e("                (false, val.parse::<f32>().unwrap_or(0.0))")
+				e("            };")
+				local fg
+				if op.overload then
+					fg = ("if (sym && v_raw.abs() >= 1.0) || (!sym && v_raw >= 1.0) { %s } else { %s }"):format(
+						rgb_lit(op.overload), rgb_lit(op.fg))
+				else
+					fg = rgb_lit(op.fg)
+				end
 				e("            let fg = %s;", fg)
 				e("            let bg = %s;", bg)
-				e("            let (sym, v) = if let Some(s) = val.strip_prefix('s') {")
-				e("                (true, s.parse::<f32>().unwrap_or(0.0).clamp(-1.0, 1.0))")
-				e("            } else {")
-				e("                (false, val.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0))")
-				e("            };")
+				e("            let v = if sym { v_raw.clamp(-1.0, 1.0) } else { v_raw.clamp(0.0, 1.0) };")
 				e("            PROG_%d_PREV.store(0, Ordering::Relaxed);", op.prog_idx)
 				e("            backend.fill_rect(%d, %d, %d, %d, bg);", op.px, op.py, op.pw, op.ph)
 				e("            if sym {")
