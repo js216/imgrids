@@ -1436,7 +1436,7 @@ local auto_active = {}  -- [menu][param] = {{value, idx}, ...}
 for _, name in ipairs(menu_names) do
 	auto_active[name] = {}
 	for _, op in ipairs(menu_ops[name]) do
-		if op.press and (op.press[1] == "set_stay" or op.press[1] == "set_param") and op.active_idx then
+		if op.press and (op.press[1] == "set_stay" or op.press[1] == "set_param" or op.press[1] == "set_nav" or op.press[1] == "set_ref_source") and op.active_idx then
 			local param = op.press[2]
 			local value = op.press[3]
 			if param and value then
