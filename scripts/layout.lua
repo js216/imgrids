@@ -767,6 +767,8 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 		local text_y
 		if valign == "top" then
 			text_y = y + by
+		elseif valign == "bottom" then
+			text_y = y + h - bh + by - block_h
 		else
 			text_y = (y + by) + math.floor(((h - bh) - block_h) / 2)
 		end
@@ -820,7 +822,9 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				inner_w = f_inner_w,
 				align = align,
 				line_xs = f_line_xs,
-				text_y = (y + fby) + math.floor(((h - fbh) - fblock_h) / 2),
+				text_y = valign == "top" and (y + fby)
+					or valign == "bottom" and (y + h - fbh + fby - fblock_h)
+					or (y + fby) + math.floor(((h - fbh) - fblock_h) / 2),
 				line_step = fch_px + line_gap,
 				pad_chars = math.max(0, math.floor(f_inner_w / fcw_px)),
 				border = { width = fs.border.width, color = fs.border.color, side = fs.border.side },
@@ -941,10 +945,10 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					normal_border = { width = s.border.width, color = s.border.color, side = s.border.side },
 				}
 			elseif render == "pointer slider" then
-				local inset_l = eff_pad(s, "left")
-				local inset_t = eff_pad(s, "top")
-				local inset_r = eff_pad(s, "right")
-				local inset_b = eff_pad(s, "bottom")
+				local inset_l = eff_pad(s, "left") + border_inset(s, "left")
+				local inset_t = eff_pad(s, "top") + border_inset(s, "top")
+				local inset_r = eff_pad(s, "right") + border_inset(s, "right")
+				local inset_b = eff_pad(s, "bottom") + border_inset(s, "bottom")
 				local sw = math.max(0, w - inset_l - inset_r)
 				local sh = math.max(0, h - inset_t - inset_b)
 				-- Pre-compute ribbon colors by calling the Lua function for each x
