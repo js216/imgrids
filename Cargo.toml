@@ -1,28 +1,22 @@
-[package]
-name    = "imgrids"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-name = "imgrids"
-
-[dependencies]
-libc = "0.2"
-ab_glyph = "0.2"
-sdl2 = { version = "0.35", optional = true }
-
-[features]
-fb0 = []
-sdl = ["dep:sdl2"]
-web = []
-
-[[example]]
-name = "raw"
-path = "examples/raw.rs"
-
-[[example]]
-name = "app"
-path = "examples/app/main.rs"
+[workspace]
+members = [
+    "imgrids",
+    "backends/sdl",
+    "backends/fb0",
+    "backends/wasm",
+    "examples/sdl",
+    "examples/fb32",
+    "examples/arm",
+    "examples/wasm",
+]
+default-members = [
+    "imgrids",
+    "backends/sdl",
+    "backends/fb0",
+    "examples/sdl",
+    "examples/fb32",
+]
+resolver = "2"
 
 [profile.release]
 opt-level = 3

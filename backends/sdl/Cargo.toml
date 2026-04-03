@@ -1,0 +1,8 @@
+[package]
+name = "imgrids-sdl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+sdl2 = "0.35"

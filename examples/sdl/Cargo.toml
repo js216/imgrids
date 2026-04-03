@@ -1,0 +1,16 @@
+[package]
+name = "demo-sdl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+imgrids-sdl = { path = "../../backends/sdl" }
+
+[[bin]]
+name = "demo-sdl"
+path = "src/main.rs"
+
+[[bin]]
+name = "raw-sdl"
+path = "src/raw.rs"

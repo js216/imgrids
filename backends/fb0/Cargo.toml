@@ -1,0 +1,8 @@
+[package]
+name = "imgrids-fb0"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+libc = "0.2"

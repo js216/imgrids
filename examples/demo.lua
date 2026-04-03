@@ -1,7 +1,7 @@
 -- demo.lua — imgrids feature tutorial
 -- Transpile: lua scripts/layout.lua < examples/demo.lua > examples/app/ui.rs
 
-dofile("scripts/symbols.lua")
+dofile("imgrids/transpiler/symbols.lua")
 
 screen = {
 	width = 800,
@@ -36,17 +36,17 @@ local DEGREE     = utf8char(0x00B0)  -- °
 local extra = {0x00B1, 0x00B5, 0x00B0, 0x2212} -- ±, µ, °, −
 
 fonts = {
-	myriad_large = { "fonts/MyriadPro-Regular.ttf", 32, extra = extra },
-	myriad_small = { "fonts/MyriadPro-Regular.ttf", 20, extra = extra },
-	roboto_large = { "fonts/RobotoMono-Regular.ttf", 32 },
-	roboto_small = { "fonts/RobotoMono-Regular.ttf", 20 },
+	myriad_large = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 32, extra = extra },
+	myriad_small = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 20, extra = extra },
+	roboto_large = { "imgrids/src/fonts/RobotoMono-Regular.ttf", 32 },
+	roboto_small = { "imgrids/src/fonts/RobotoMono-Regular.ttf", 20 },
 	vga = { "raster::font_vga16", 12 },
 	-- Font with fallback: MyriadPro primary, FontAwesome for icons
-	myriad_icons = { {"fonts/MyriadPro-Regular.ttf", 32}, {"fonts/FontAwesome5.ttf", 32} },
+	myriad_icons = { {"imgrids/src/fonts/MyriadPro-Regular.ttf", 32}, {"imgrids/src/fonts/FontAwesome5.ttf", 32} },
 	-- Font with extra code points (non-ASCII like ±, µ, °)
-	myriad_extra = { "fonts/MyriadPro-Regular.ttf", 32, extra = {0x00B1, 0x00B5, 0x00B0} },
+	myriad_extra = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 32, extra = {0x00B1, 0x00B5, 0x00B0} },
 	-- Font chain with extra code points
-	myriad_icons_extra = { {"fonts/MyriadPro-Regular.ttf", 32}, {"fonts/FontAwesome5.ttf", 32},
+	myriad_icons_extra = { {"imgrids/src/fonts/MyriadPro-Regular.ttf", 32}, {"imgrids/src/fonts/FontAwesome5.ttf", 32},
 	                       extra = {0x00B1, 0x00B5, 0x00B0} },
 }
 
@@ -90,7 +90,7 @@ menus = {
       {"[1/34] Col Layout",                                        size = 40, style = s_title},
       {"col stacks children vertically.\nEach child gets equal height.", size = 50, style = s_desc},
       nav("Popup", "Rows"),
-      {"First Item",  style = {bg = {60,  60,  120}}},
+      {"First",  style = {bg = {60,  60,  120}}},
       {"Second", style = {bg = {60,  120, 60 }}},
       {"Third",  style = {bg = {120, 60,  60 }}},
    },
@@ -476,37 +476,37 @@ menus.Icons = {"col",
    {"row", leaf_style = {border = {width = 0}},
       {"col",
          {"small", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {pad = 55, border = {width = 0}}},
+         {icon = "imgrids/icons/lpf.svg", style = {pad = 55, border = {width = 0}}},
       },
       {"col",
          {"medium", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {pad = 35, border = {width = 0}}},
+         {icon = "imgrids/icons/lpf.svg", style = {pad = 35, border = {width = 0}}},
       },
       {"col",
          {"large", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {pad = 10, border = {width = 0}}},
+         {icon = "imgrids/icons/lpf.svg", style = {pad = 10, border = {width = 0}}},
       },
       {"col",
          {"full", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {pad = 0, border = {width = 0}}},
+         {icon = "imgrids/icons/lpf.svg", style = {pad = 0, border = {width = 0}}},
       },
    },
    {"row", leaf_style = {border = {width = 0}},
       {"col",
          {"white on blue", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {bg = {16, 28, 55}}},
+         {icon = "imgrids/icons/lpf.svg", style = {bg = {16, 28, 55}}},
       },
       {"col",
          {"white on gray", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {bg = {60, 60, 60}}},
+         {icon = "imgrids/icons/lpf.svg", style = {bg = {60, 60, 60}}},
       },
       {"col",
          {"green on black", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {fg = colors.green}},
+         {icon = "imgrids/icons/lpf.svg", style = {fg = colors.green}},
       },
       {"col",
          {"red on white", size = 25, style = {font = fonts.myriad_small, border = {width = 0}}},
-         {icon = "icons/lpf.svg", style = {fg = colors.red, bg = colors.white}},
+         {icon = "imgrids/icons/lpf.svg", style = {fg = colors.red, bg = colors.white}},
       },
    },
 }

@@ -1,0 +1,16 @@
+[package]
+name = "demo-arm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+imgrids-fb0 = { path = "../../backends/fb0" }
+
+[[bin]]
+name = "demo-arm"
+path = "src/main.rs"
+
+[[bin]]
+name = "raw-arm"
+path = "src/raw.rs"

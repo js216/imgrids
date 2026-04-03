@@ -1,0 +1,16 @@
+[package]
+name = "demo-fb32"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+imgrids-fb0 = { path = "../../backends/fb0" }
+
+[[bin]]
+name = "demo-fb32"
+path = "src/main.rs"
+
+[[bin]]
+name = "raw-fb32"
+path = "src/raw.rs"
