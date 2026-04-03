@@ -4,6 +4,9 @@
 *.o
 *.font
 
+# build artifacts
+*.alpha
+
 # directories
 .claude
 target
