@@ -286,8 +286,8 @@ menus = {
          {"label\nfocusable=false", focusable = false},
       },
       {"row",
-         {"press=\n(default)",  press = {"click"}},
-         {"label\n(default)"},
+         {"press= (default)",  press = {"click"}},
+         {"label (default)"},
       },
    },
 
@@ -343,10 +343,6 @@ menus = {
           style = {fg = colors.blue, bg = {40, 40, 40}}},
          {lbl = "parameter One"},
       },
-      {lbl = "parameter Two", render = "progress bar",
-       style = {margin = 10, pad = 0, pad_left = 0, pad_right = 0, pad_bottom = 0, pad_top = 25,
-                fg = colors.green, bg = {40, 40, 40},
-                border = {width = 2, color = colors.white, side = {"left", "bottom", "right"}}}},
    },
 
    Complex = {"col",
@@ -448,7 +444,7 @@ menus.FocusGroups = {"col",
        focused = {border = {width = 3, color = colors.green, side = {"top", "bottom", "right"}}},
        style = {pad = 10, margin = 0, margin_right = 4, fg = colors.green}},
    },
-   {"Click either Label or the bar.\nBoth highlight as one unit.", style = {border = {width = 0}}},
+   {"Both highlight as one unit.", style = {border = {width = 0}}},
 }
 
 menus.Overload = {"col",
@@ -466,7 +462,7 @@ menus.Overload = {"col",
        overload = colors.red,
        style = {pad = 10, fg = colors.green}},
    },
-   {"The bottom bar turns red when\nits value reaches or exceeds 1.0.", style = {border = {width = 0}}},
+   {"Bar turns red at 1.0.", style = {border = {width = 0}}},
 }
 
 menus.Icons = {"col",
@@ -529,7 +525,7 @@ menus.ActiveStyle = {"col",
        style = {bg = {30, 30, 80}, margin = 6, align = "center",
                 border = {width = 1, color = {100,100,100}}}},
    },
-   {"Click a button to see the underline.\nApp calls set_active() to toggle.", style = {border = {width = 0}}},
+   {"Click a button to toggle.", style = {border = {width = 0}}},
 }
 
 menus.MidString = {"col",
@@ -539,7 +535,7 @@ menus.MidString = {"col",
    -- Dynamic label with color escape codes + newlines
    {lbl = "color_demo", align = "center",
     colors = {colors.green, colors.red, {font = fonts.myriad_small, fg = colors.yellow}}},
-   {"colors={green, red, {small+yellow}}\n\\x01=green \\x02=red \\x03=small+yellow\n\\x00=default. Newlines work too!", style = {border = {width = 0}}},
+   {"\\x01=green \\x02=red \\x03=small+yellow", style = {border = {width = 0}}},
 }
 
 -- Ribbon color function: hue sweep from blue to red
