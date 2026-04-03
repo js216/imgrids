@@ -1,8 +1,10 @@
-use crate::{Backend, InputEvent, Pixel, Renderer};
+use crate::{Backend, InputEvent, Renderer, Rgb565};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::{Canvas, Texture, TextureCreator};
 use sdl2::video::{Window, WindowContext};
 use sdl2::EventPump;
+
+type P = Rgb565;
 
 pub struct Sdl2Backend {
     pub canvas: Canvas<Window>,
@@ -11,7 +13,7 @@ pub struct Sdl2Backend {
     pub width: usize,
     pub height: usize,
     // Shadow pixel buffer: fill_rect/blit write here; flush uploads once.
-    pixels: Vec<Pixel>,
+    pixels: Vec<P>,
     // Dirty bounding rectangle since last flush.
     dirty_x0: usize,
     dirty_y0: usize,
@@ -52,7 +54,7 @@ impl Sdl2Backend {
             height: height as usize,
             // Over-allocate by 64 rows so glyph blits near the bottom edge
             // can never index out of bounds.  Extra pixels are never uploaded.
-            pixels: vec![0; (width * (height + 64)) as usize],
+            pixels: vec![P::default(); (width * (height + 64)) as usize],
             dirty_x0: width as usize,
             dirty_y0: height as usize,
             dirty_x1: 0,
@@ -72,8 +74,8 @@ impl Sdl2Backend {
     }
 }
 
-impl Backend for Sdl2Backend {
-    fn clear(&mut self, color: Pixel) {
+impl Backend<P> for Sdl2Backend {
+    fn clear(&mut self, color: P) {
         self.pixels.fill(color);
         self.dirty_x0 = 0;
         self.dirty_y0 = 0;
@@ -87,7 +89,7 @@ impl Backend for Sdl2Backend {
         y: usize,
         w: usize,
         h: usize,
-        color: Pixel,
+        color: P,
     ) {
         let x_end = (x + w).min(self.width);
         let y_end = (y + h).min(self.height);
@@ -100,7 +102,7 @@ impl Backend for Sdl2Backend {
         self.mark_dirty(x, y, x_end, y_end);
     }
 
-    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize {
+    fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize {
         let width = self.width;
         let end_x = atlas.blit(&mut self.pixels, width, x, y, text);
         let h = atlas.cell_height();
@@ -108,7 +110,7 @@ impl Backend for Sdl2Backend {
         end_x
     }
 
-    fn blit_alpha(&mut self, icon: &crate::Icon, fg: Pixel, bg: Pixel) {
+    fn blit_alpha(&mut self, icon: &crate::Icon, fg: P, bg: P) {
         crate::blit_alpha_buf(&mut self.pixels, self.width, icon, fg, bg);
         self.mark_dirty(icon.x, icon.y, icon.x + icon.w, icon.y + icon.h);
     }
@@ -214,7 +216,7 @@ impl Backend for Sdl2Backend {
     }
 }
 
-pub fn init(w: usize, h: usize) -> Box<dyn Backend> {
+pub fn init(w: usize, h: usize) -> Box<dyn Backend<P>> {
     let sdl = sdl2::init().expect("SDL2 init");
     let video = sdl.video().expect("SDL2 video");
     let window = video

@@ -1,58 +1,87 @@
 pub mod fonts;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Bit depth
+// Pixel format
 ////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(any(
-    all(feature = "bpp16", feature = "bpp32"),
-    all(feature = "bpp16", feature = "bpp32rgba"),
-    all(feature = "bpp32", feature = "bpp32rgba"),
-))]
-compile_error!("only one of bpp16, bpp32, bpp32rgba may be selected");
-
-#[cfg(not(any(feature = "bpp16", feature = "bpp32", feature = "bpp32rgba")))]
-compile_error!("one of bpp16, bpp32, or bpp32rgba must be selected");
-
-#[cfg(feature = "bpp16")]
-pub type Pixel = u16;
-#[cfg(any(feature = "bpp32", feature = "bpp32rgba"))]
-pub type Pixel = u32;
-
-#[cfg(feature = "bpp16")]
-#[macro_export]
-macro_rules! rgb {
-    ($r:expr, $g:expr, $b:expr) => {
-        ((($r as u16 >> 3) << 11) | (($g as u16 >> 2) << 5) | ($b as u16 >> 3))
-    };
-    ($t:expr) => {{
-        let (r, g, b) = $t;
-        rgb!(r, g, b)
-    }};
+pub trait PixelFormat: Copy + Clone + Default + Send + Sync + 'static {
+    fn from_rgb(r: u8, g: u8, b: u8) -> Self;
+    fn to_rgb(self) -> (u8, u8, u8);
 }
 
-#[cfg(feature = "bpp32")]
-#[macro_export]
-macro_rules! rgb {
-    ($r:expr, $g:expr, $b:expr) => {
-        (($r as u32) << 16) | (($g as u32) << 8) | ($b as u32)
-    };
-    ($t:expr) => {{
-        let (r, g, b) = $t;
-        rgb!(r, g, b)
-    }};
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Rgb565(pub u16);
+
+impl Rgb565 {
+    #[inline]
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Rgb565(((r as u16 >> 3) << 11) | ((g as u16 >> 2) << 5) | (b as u16 >> 3))
+    }
+    #[inline]
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        ((((self.0 >> 11) & 0x1F) << 3) as u8,
+         (((self.0 >> 5) & 0x3F) << 2) as u8,
+         ((self.0 & 0x1F) << 3) as u8)
+    }
+}
+impl PixelFormat for Rgb565 {
+    #[inline] fn from_rgb(r: u8, g: u8, b: u8) -> Self { Self::from_rgb(r, g, b) }
+    #[inline] fn to_rgb(self) -> (u8, u8, u8) { self.to_rgb() }
+}
+
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Rgb888(pub u32);
+
+impl Rgb888 {
+    #[inline]
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Rgb888((r as u32) << 16 | (g as u32) << 8 | b as u32)
+    }
+    #[inline]
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        (((self.0 >> 16) & 0xFF) as u8,
+         ((self.0 >> 8) & 0xFF) as u8,
+         (self.0 & 0xFF) as u8)
+    }
+}
+impl PixelFormat for Rgb888 {
+    #[inline] fn from_rgb(r: u8, g: u8, b: u8) -> Self { Self::from_rgb(r, g, b) }
+    #[inline] fn to_rgb(self) -> (u8, u8, u8) { self.to_rgb() }
 }
 
 /// RGBA little-endian: bytes in memory are [R, G, B, 0xFF], matching canvas ImageData.
-#[cfg(feature = "bpp32rgba")]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Rgba8888(pub u32);
+
+impl Rgba8888 {
+    #[inline]
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Rgba8888(r as u32 | (g as u32) << 8 | (b as u32) << 16 | 0xFF000000)
+    }
+    #[inline]
+    pub const fn to_rgb(self) -> (u8, u8, u8) {
+        ((self.0 & 0xFF) as u8,
+         ((self.0 >> 8) & 0xFF) as u8,
+         ((self.0 >> 16) & 0xFF) as u8)
+    }
+}
+impl PixelFormat for Rgba8888 {
+    #[inline] fn from_rgb(r: u8, g: u8, b: u8) -> Self { Self::from_rgb(r, g, b) }
+    #[inline] fn to_rgb(self) -> (u8, u8, u8) { self.to_rgb() }
+}
+
+/// Convenience macro — requires a `Pixel` type alias implementing `PixelFormat` in scope.
 #[macro_export]
 macro_rules! rgb {
     ($r:expr, $g:expr, $b:expr) => {
-        ($r as u32) | (($g as u32) << 8) | (($b as u32) << 16) | 0xFF000000u32
+        <Pixel as $crate::PixelFormat>::from_rgb($r as u8, $g as u8, $b as u8)
     };
     ($t:expr) => {{
         let (r, g, b) = $t;
-        rgb!(r, g, b)
+        <Pixel as $crate::PixelFormat>::from_rgb(r as u8, g as u8, b as u8)
     }};
 }
 
@@ -77,8 +106,7 @@ use std::collections::VecDeque;
 
 static KEY_QUEUE: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
 
-#[cfg(feature = "sdl")]
-pub(crate) fn push_key(k: &str) {
+pub fn push_key(k: &str) {
     if let Ok(mut q) = KEY_QUEUE.lock() {
         q.push_back(k.to_owned());
     }
@@ -92,10 +120,10 @@ pub fn poll_key() -> Option<String> {
 // Renderers
 ////////////////////////////////////////////////////////////////////////////////
 
-pub trait Renderer {
+pub trait Renderer<P: PixelFormat> {
     /// Draw text into a raw pixel buffer. Returns the x coordinate just
     /// past the last drawn pixel (i.e. x + rendered width).
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize;
+    fn blit(&self, fb: &mut [P], stride: usize, x: usize, y: usize, text: &str) -> usize;
 
     fn cell_height(&self) -> usize;
     fn char_width(&self, c: char) -> usize;
@@ -112,9 +140,6 @@ pub mod prebaked;
 // Backends
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Alpha-blend an icon into a pixel buffer.
-/// `alpha` is `iw * ih` bytes (row-major, 0=bg, 255=fg).
-/// The icon is placed at `(x, y)` in the buffer with stride `stride`.
 /// Pre-rendered icon alpha mask for `blit_alpha`.
 pub struct Icon {
     pub x: usize,
@@ -125,9 +150,11 @@ pub struct Icon {
 }
 
 /// Alpha-blend an icon into a pixel buffer.
-pub fn blit_alpha_buf(buf: &mut [Pixel], stride: usize, icon: &Icon, fg: Pixel, bg: Pixel) {
-    let (fr, fg_, fb) = pixel_to_rgb(fg);
-    let (br, bg_, bb) = pixel_to_rgb(bg);
+pub fn blit_alpha_buf<P: PixelFormat>(buf: &mut [P], stride: usize, icon: &Icon, fg: P, bg: P) {
+    let (fr, fg_, fb) = fg.to_rgb();
+    let (br, bg_, bb) = bg.to_rgb();
+    let (fr, fg_, fb) = (fr as u32, fg_ as u32, fb as u32);
+    let (br, bg_, bb) = (br as u32, bg_ as u32, bb as u32);
     let alpha_len = icon.alpha.len();
     for row in 0..icon.h {
         let py = icon.y + row;
@@ -140,55 +167,29 @@ pub fn blit_alpha_buf(buf: &mut [Pixel], stride: usize, icon: &Icon, fg: Pixel, 
             let r = (fr * a + br * (255 - a)) / 255;
             let g = (fg_ * a + bg_ * (255 - a)) / 255;
             let b = (fb * a + bb * (255 - a)) / 255;
-            buf[base + col] = rgb_to_pixel(r, g, b);
+            buf[base + col] = P::from_rgb(r as u8, g as u8, b as u8);
         }
     }
 }
 
-#[cfg(feature = "bpp16")]
-fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
-    (((p as u32 >> 11) & 0x1F) << 3, ((p as u32 >> 5) & 0x3F) << 2, (p as u32 & 0x1F) << 3)
-}
-#[cfg(feature = "bpp32")]
-fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
-    ((p as u32 >> 16) & 0xFF, (p as u32 >> 8) & 0xFF, p as u32 & 0xFF)
-}
-#[cfg(feature = "bpp32rgba")]
-fn pixel_to_rgb(p: Pixel) -> (u32, u32, u32) {
-    (p as u32 & 0xFF, (p as u32 >> 8) & 0xFF, (p as u32 >> 16) & 0xFF)
-}
-
-#[cfg(feature = "bpp16")]
-fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
-}
-#[cfg(feature = "bpp32")]
-fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    ((r << 16) | (g << 8) | b) as Pixel
-}
-#[cfg(feature = "bpp32rgba")]
-fn rgb_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    (r | (g << 8) | (b << 16) | 0xFF000000) as Pixel
-}
-
-pub trait Backend {
-    fn clear(&mut self, color: Pixel);
+pub trait Backend<P: PixelFormat> {
+    fn clear(&mut self, color: P);
     fn fill_rect(
         &mut self,
         x: usize,
         y: usize,
         w: usize,
         h: usize,
-        color: Pixel,
+        color: P,
     );
 
-    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize;
+    fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize;
 
     /// Blit an alpha-mask icon.
-    fn blit_alpha(&mut self, icon: &Icon, fg: Pixel, bg: Pixel);
+    fn blit_alpha(&mut self, icon: &Icon, fg: P, bg: P);
 
     /// Blit text clipped to a maximum x coordinate.
-    fn blit_clipped(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str, max_x: usize) -> usize {
+    fn blit_clipped(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str, max_x: usize) -> usize {
         // Find how many chars fit within max_x
         let mut w = 0;
         let mut end = 0;
@@ -207,14 +208,11 @@ pub trait Backend {
     }
 
     /// Present the completed frame to the display.
-    /// Backends that double-buffer (e.g. SDL2) copy the back-buffer and flip
-    /// here; backends that write directly to the display (framebuffer, web)
-    /// can leave this as the default no-op.
     fn flush(&mut self) {}
 }
 
-impl Backend for Box<dyn Backend> {
-    fn clear(&mut self, color: Pixel) {
+impl<P: PixelFormat> Backend<P> for Box<dyn Backend<P>> {
+    fn clear(&mut self, color: P) {
         (**self).clear(color)
     }
     fn fill_rect(
@@ -223,14 +221,14 @@ impl Backend for Box<dyn Backend> {
         y: usize,
         w: usize,
         h: usize,
-        color: Pixel,
+        color: P,
     ) {
         (**self).fill_rect(x, y, w, h, color)
     }
-    fn blit(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str) -> usize {
+    fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize {
         (**self).blit(atlas, x, y, text)
     }
-    fn blit_clipped(&mut self, atlas: &dyn Renderer, x: usize, y: usize, text: &str, max_x: usize) -> usize {
+    fn blit_clipped(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str, max_x: usize) -> usize {
         (**self).blit_clipped(atlas, x, y, text, max_x)
     }
     fn poll_events(&mut self) -> &[InputEvent] {
@@ -239,34 +237,28 @@ impl Backend for Box<dyn Backend> {
     fn flush(&mut self) {
         (**self).flush()
     }
-    fn blit_alpha(&mut self, icon: &Icon, fg: Pixel, bg: Pixel) {
+    fn blit_alpha(&mut self, icon: &Icon, fg: P, bg: P) {
         (**self).blit_alpha(icon, fg, bg)
     }
 }
 
 #[cfg(feature = "fb0")]
 pub mod framebuffer;
-#[cfg(feature = "fb0")]
-pub use framebuffer::init;
 
 #[cfg(feature = "sdl")]
 pub mod sdl2;
-#[cfg(all(feature = "sdl", not(feature = "web")))]
-pub use sdl2::init;
 
 #[cfg(feature = "web")]
 pub mod web;
-#[cfg(feature = "web")]
-pub use web::init;
 #[cfg(target_os = "emscripten")]
 pub use web::run;
 #[cfg(target_os = "emscripten")]
 pub use web::sleep;
 
 #[cfg(not(target_os = "emscripten"))]
-pub fn run(
-    mut backend: Box<dyn Backend>,
-    mut tick_fn: impl FnMut(&mut dyn Backend),
+pub fn run<P: PixelFormat>(
+    mut backend: Box<dyn Backend<P>>,
+    mut tick_fn: impl FnMut(&mut dyn Backend<P>),
 ) {
     'main: loop {
         for ev in backend.poll_events() {

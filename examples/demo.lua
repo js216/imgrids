@@ -90,7 +90,7 @@ menus = {
       {"[1/34] Col Layout",                                        size = 40, style = s_title},
       {"col stacks children vertically.\nEach child gets equal height.", size = 50, style = s_desc},
       nav("Popup", "Rows"),
-      {"First",  style = {bg = {60,  60,  120}}},
+      {"First Item",  style = {bg = {60,  60,  120}}},
       {"Second", style = {bg = {60,  120, 60 }}},
       {"Third",  style = {bg = {120, 60,  60 }}},
    },

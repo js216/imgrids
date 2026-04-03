@@ -1,7 +1,7 @@
 // Bitmap font renderer - scales any embedded font to any cell size using
 // nearest-neighbour sampling, baking fg/bg at init time.
 
-use crate::{Pixel, Renderer};
+use crate::{PixelFormat, Renderer};
 
 /// Describes a compiled-in bitmap font.
 ///
@@ -22,21 +22,21 @@ impl BitmapFont {
     }
 }
 
-pub struct RasterAtlas {
+pub struct RasterAtlas<P: PixelFormat> {
     glyph_w: usize,
     glyph_h: usize,
     font: &'static BitmapFont,
     /// Flat: [font.glyphs][glyph_h * glyph_w]
-    glyphs: Vec<Pixel>,
+    glyphs: Vec<P>,
 }
 
-impl RasterAtlas {
+impl<P: PixelFormat> RasterAtlas<P> {
     pub fn new(
         font: &'static BitmapFont,
         glyph_w: usize,
         glyph_h: usize,
-        fg: Pixel,
-        bg: Pixel,
+        fg: P,
+        bg: P,
     ) -> Self {
         let n = glyph_h * glyph_w;
         let mut glyphs = vec![bg; font.glyphs * n];
@@ -60,15 +60,15 @@ impl RasterAtlas {
     }
 
     #[inline]
-    fn glyph(&self, code: usize) -> &[Pixel] {
+    fn glyph(&self, code: usize) -> &[P] {
         let n = self.glyph_h * self.glyph_w;
         let i = code % self.font.glyphs;
         &self.glyphs[i * n..i * n + n]
     }
 }
 
-impl Renderer for RasterAtlas {
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
+impl<P: PixelFormat> Renderer<P> for RasterAtlas<P> {
+    fn blit(&self, fb: &mut [P], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let (gw, gh) = (self.glyph_w, self.glyph_h);
         let mut cx = x;
         for byte in text.bytes() {
@@ -91,14 +91,14 @@ impl Renderer for RasterAtlas {
     }
 }
 
-fn rasterise(
-    dst: &mut [Pixel],
+fn rasterise<P: PixelFormat>(
+    dst: &mut [P],
     gw: usize,
     gh: usize,
     font: &BitmapFont,
     ascii: usize,
-    fg: Pixel,
-    bg: Pixel,
+    fg: P,
+    bg: P,
 ) {
     for dy in 0..gh {
         let sy = (dy * font.font_h) / gh;

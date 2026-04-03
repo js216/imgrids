@@ -79,7 +79,7 @@ local function check_menu_name(name)
 end
 
 local function rgb_lit(c)
-	return ("rgb!(%d, %d, %d)"):format(c[1], c[2], c[3])
+	return ("Pixel::from_rgb(%d, %d, %d)"):format(c[1], c[2], c[3])
 end
 
 -- Font can be {"path", size} (single) or {{"path1", size}, {"path2", size}} (fallback chain)
@@ -1229,12 +1229,15 @@ end
 local extra_imports = ""
 if need_renderer then extra_imports = extra_imports .. ", Renderer" end
 if need_icon then extra_imports = extra_imports .. ", Icon" end
-e("use imgrids::{rgb, Backend, InputEvent%s};", extra_imports)
+e("use super::Pixel;")
+e("use imgrids::{Backend, InputEvent%s};", extra_imports)
 if need_raster then
 	e("use imgrids::raster::RasterAtlas;")
+	e("type RasterAtlasP = RasterAtlas<Pixel>;")
 end
 if need_ttf then
 	e("use imgrids::prebaked::PrebakedAtlas;")
+	e("type PrebakedAtlasP = PrebakedAtlas<Pixel>;")
 end
 if #atlases > 0 then
 	e("use std::sync::OnceLock;")
@@ -1311,17 +1314,17 @@ end
 for _, a in ipairs(atlases) do
 	if is_raster(a.font) then
 		local name, gw, gh = resolve_raster_font(a.font)
-		e("static %s: OnceLock<RasterAtlas> = OnceLock::new();", a.varname)
-		e("fn %s() -> &'static RasterAtlas {", a.fn_name)
-		e("    %s.get_or_init(|| RasterAtlas::new(", a.varname)
+		e("static %s: OnceLock<RasterAtlasP> = OnceLock::new();", a.varname)
+		e("fn %s() -> &'static RasterAtlasP {", a.fn_name)
+		e("    %s.get_or_init(|| RasterAtlasP::new(", a.varname)
 		e("        &imgrids::fonts::%s::FONT, %d, %d, %s, %s,", name, gw, gh, rgb_lit(a.fg), rgb_lit(a.bg))
 		e("    ))")
 		e("}")
 	else
 		local vid = a.varname
-		e("static %s: OnceLock<PrebakedAtlas> = OnceLock::new();", a.varname)
-		e("fn %s() -> &'static PrebakedAtlas {", a.fn_name)
-		e("    %s.get_or_init(|| PrebakedAtlas::from_alpha(", a.varname)
+		e("static %s: OnceLock<PrebakedAtlasP> = OnceLock::new();", a.varname)
+		e("fn %s() -> &'static PrebakedAtlasP {", a.fn_name)
+		e("    %s.get_or_init(|| PrebakedAtlasP::from_alpha(", a.varname)
 		e("        prebaked_fonts::%s_CELL_H,", vid)
 		e("        &prebaked_fonts::%s_ASCII_ADV,", vid)
 		e("        &prebaked_fonts::%s_ASCII_OFF,", vid)
@@ -1478,7 +1481,7 @@ if need_atomics then
 		for _, c in ipairs(op.ribbon) do
 			parts[#parts+1] = rgb_lit(c)
 		end
-		e("static SLIDER_%d_RIBBON: &[imgrids::Pixel] = &[%s];", i, table.concat(parts, ", "))
+		e("static SLIDER_%d_RIBBON: &[Pixel] = &[%s];", i, table.concat(parts, ", "))
 	end
 	for i, op in ipairs(all_chart_ops) do
 		e("static CHART_%d_DATA: Mutex<Vec<f64>> = Mutex::new(Vec::new());", i)
@@ -1579,7 +1582,7 @@ e("}")
 e("")
 
 -- update_menu()
-e("pub fn update_menu(backend: &mut dyn Backend, menu: Menu) {")
+e("pub fn update_menu(backend: &mut dyn Backend<Pixel>, menu: Menu) {")
 e("    let mut current = CURRENT_MENU.lock().unwrap();")
 e("    if *current != Some(menu) {")
 e("        *current = Some(menu);")
@@ -1615,7 +1618,7 @@ e("}")
 e("")
 
 -- update_params()
-e("pub fn update_params(backend: &mut dyn Backend, changes: &[(&str, &str)]) {")
+e("pub fn update_params(backend: &mut dyn Backend<Pixel>, changes: &[(&str, &str)]) {")
 e("    match *CURRENT_MENU.lock().unwrap() {")
 for _, name in ipairs(menu_names) do
 	e("        Some(Menu::%s) => update_params_%s(backend, changes),", name, name:lower())
@@ -1643,7 +1646,7 @@ end
 
 -- draw_<menu>() per-menu functions
 for _, name in ipairs(menu_names) do
-	e("fn draw_%s(backend: &mut dyn Backend) {", name:lower())
+	e("fn draw_%s(backend: &mut dyn Backend<Pixel>) {", name:lower())
 	e("    backend.fill_rect(0, 0, %d, %d, %s);", screen.width, screen.height, rgb_lit(default_style.bg))
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "icon" then
@@ -1768,8 +1771,8 @@ local function emit_dyn_blit(op, indent, val_expr)
 			e("%s    let start_x = %d_usize;", indent, op.text_x)
 		end
 		e("%s    let mut cx = start_x;", indent)
-		e("%s    let alts: &[&dyn imgrids::Renderer] = &[%s];", indent, table.concat(alt_fns, ", "))
-		e("%s    let mut cur: &dyn imgrids::Renderer = %s();", indent, atlas_fn)
+		e("%s    let alts: &[&dyn imgrids::Renderer<Pixel>] = &[%s];", indent, table.concat(alt_fns, ", "))
+		e("%s    let mut cur: &dyn imgrids::Renderer<Pixel> = %s();", indent, atlas_fn)
 		e("%s    let mut cy = %d_usize;", indent, op.text_y)
 		e("%s    for c in %s.chars() {", indent, val_expr)
 		e("%s        if c == '\\x00' { cur = %s(); continue; }", indent, atlas_fn)
@@ -1857,7 +1860,7 @@ end
 for _, name in ipairs(menu_names) do
 	local fops = get_focusable_ops(menu_ops[name])
 	if #fops > 0 then
-		e("fn draw_focus_%s(backend: &mut dyn Backend, prev: Option<usize>, focused: Option<usize>) {", name:lower())
+		e("fn draw_focus_%s(backend: &mut dyn Backend<Pixel>, prev: Option<usize>, focused: Option<usize>) {", name:lower())
 		for fi, op in ipairs(fops) do
 			local idx = op.focus_index
 			e("    if focused == Some(%d) && prev != Some(%d) {", idx, idx)
@@ -2040,7 +2043,7 @@ for _, name in ipairs(menu_names) do
 	local has_content = #dyn_ops + #prog_ops + #chart_ops + #fops + (has_auto_active and 1 or 0)
 	local be_param = has_content > 0 and "backend" or "_backend"
 	local chg_param = (#dyn_ops + #prog_ops + #chart_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
-	e("fn update_params_%s(%s: &mut dyn Backend, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
+	e("fn update_params_%s(%s: &mut dyn Backend<Pixel>, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
 
 	-- Derived labels: watch constituent params and rebuild
 	local derived_ops = {}

@@ -1,3 +1,18 @@
+#[cfg(feature = "sdl")]
+use imgrids::Rgb565;
+#[cfg(feature = "sdl")]
+pub type Pixel = Rgb565;
+
+#[cfg(feature = "fb0")]
+use imgrids::Rgb888;
+#[cfg(feature = "fb0")]
+pub type Pixel = Rgb888;
+
+#[cfg(feature = "web")]
+use imgrids::Rgba8888;
+#[cfg(feature = "web")]
+pub type Pixel = Rgba8888;
+
 mod ui;
 
 struct GuiState {
@@ -36,7 +51,13 @@ fn current_values(t: f32) -> Vec<(&'static str, String)> {
 }
 
 fn main() {
-    let mut backend = imgrids::init(ui::SCR_W, ui::SCR_H);
+    #[cfg(feature = "sdl")]
+    let mut backend = imgrids::sdl2::init(ui::SCR_W, ui::SCR_H);
+    #[cfg(feature = "fb0")]
+    let mut backend = imgrids::framebuffer::init(ui::SCR_W, ui::SCR_H);
+    #[cfg(feature = "web")]
+    let mut backend = imgrids::web::init(ui::SCR_W, ui::SCR_H);
+
     let mut state = GuiState { menu: ui::Menu::Hello, quit: false, t: 0.0 };
     ui::force_redraw();
 

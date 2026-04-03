@@ -1,3 +1,18 @@
+#[cfg(feature = "sdl")]
+use imgrids::Rgb565;
+#[cfg(feature = "sdl")]
+type Pixel = Rgb565;
+
+#[cfg(feature = "fb0")]
+use imgrids::Rgb888;
+#[cfg(feature = "fb0")]
+type Pixel = Rgb888;
+
+#[cfg(feature = "web")]
+use imgrids::Rgba8888;
+#[cfg(feature = "web")]
+type Pixel = Rgba8888;
+
 use imgrids::fonts::font_vga16::FONT;
 use imgrids::raster::RasterAtlas;
 use imgrids::ttf::TtfAtlas;
@@ -8,7 +23,12 @@ const BLACK: (u8, u8, u8) = (0, 0, 0);
 const BLUE:  (u8, u8, u8) = (0, 0, 200);
 
 fn main() {
-    let mut backend = imgrids::init(800, 480);
+    #[cfg(feature = "sdl")]
+    let mut backend = imgrids::sdl2::init(800, 480);
+    #[cfg(feature = "fb0")]
+    let mut backend = imgrids::framebuffer::init(800, 480);
+    #[cfg(feature = "web")]
+    let mut backend = imgrids::web::init(800, 480);
 
     let font = RasterAtlas::new(&FONT, 16, 32, rgb!(WHITE), rgb!(BLACK));
     let ttf = TtfAtlas::new(&[("fonts/MyriadPro-Regular.ttf", 32)], &[], rgb!(WHITE), rgb!(BLACK))

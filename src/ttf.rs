@@ -1,11 +1,11 @@
-use crate::{Pixel, Renderer};
+use crate::{PixelFormat, Renderer};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use std::collections::HashMap;
 use std::io;
 
 // --- Atlas (baked pixels for one size+colour combination) --------------------
 
-pub struct TtfAtlas {
+pub struct TtfAtlas<P: PixelFormat> {
     cell_h: usize,
     /// Fast-path advance width for ASCII 0-127; 0 = no glyph
     ascii_adv: [usize; 128],
@@ -14,18 +14,18 @@ pub struct TtfAtlas {
     /// Extended glyphs (non-ASCII): code point → (offset, advance)
     ext: HashMap<u32, (usize, usize)>,
     /// Flat buffer of all glyph bitmaps concatenated
-    buf: Vec<Pixel>,
+    buf: Vec<P>,
 }
 
-impl TtfAtlas {
+impl<P: PixelFormat> TtfAtlas<P> {
     /// Create an atlas from one or more font files (fallback chain).
     /// Each entry is (path, size). Glyphs are resolved from the first
     /// font that contains them.
     pub fn new(
         fonts: &[(&str, usize)],
         extra: &[u32],
-        fg: Pixel,
-        bg: Pixel,
+        fg: P,
+        bg: P,
     ) -> io::Result<Self> {
         if fonts.is_empty() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "no fonts"));
@@ -58,13 +58,13 @@ impl TtfAtlas {
     pub fn new_single(
         path: &str,
         cell_h: usize,
-        fg: Pixel,
-        bg: Pixel,
+        fg: P,
+        bg: P,
     ) -> io::Result<Self> {
         Self::new(&[(path, cell_h)], &[], fg, bg)
     }
 
-    fn bake(fonts: &[FontVec], extra: &[u32], cell_h: usize, fg: Pixel, bg: Pixel) -> Self {
+    fn bake(fonts: &[FontVec], extra: &[u32], cell_h: usize, fg: P, bg: P) -> Self {
         let (fg_rgb, bg_rgb) = channels(fg, bg);
 
         // Collect all code points to render: ASCII + extra + scan fonts for non-ASCII
@@ -167,7 +167,7 @@ impl TtfAtlas {
     }
 
     #[inline]
-    fn glyph_by_char(&self, c: char) -> Option<(&[Pixel], usize)> {
+    fn glyph_by_char(&self, c: char) -> Option<(&[P], usize)> {
         let cp = c as u32;
         let (off, gw) = if cp < 128 {
             let gw = self.ascii_adv[cp as usize];
@@ -181,7 +181,7 @@ impl TtfAtlas {
     }
 }
 
-impl TtfAtlas {
+impl<P: PixelFormat> TtfAtlas<P> {
     fn try_ligature(chars: &[char], i: usize, atlas: &Self) -> (char, usize) {
         if chars[i] == 'f' {
             if i + 2 < chars.len() && chars[i+1] == 'f' && chars[i+2] == 'i'
@@ -199,8 +199,8 @@ impl TtfAtlas {
     }
 }
 
-impl Renderer for TtfAtlas {
-    fn blit(&self, fb: &mut [Pixel], stride: usize, x: usize, y: usize, text: &str) -> usize {
+impl<P: PixelFormat> Renderer<P> for TtfAtlas<P> {
+    fn blit(&self, fb: &mut [P], stride: usize, x: usize, y: usize, text: &str) -> usize {
         let ch = self.cell_h;
         let fb_len = fb.len();
         let mut cx = x;
@@ -260,46 +260,10 @@ fn compute_scale(font: &FontVec, cell_h: usize) -> PxScale {
     PxScale::from((cell_h as f32 / natural_h) * cell_h as f32)
 }
 
-#[cfg(feature = "bpp16")]
-fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
-    (
-        ((p as u32 >> 11) & 0x1F) << 3,
-        ((p as u32 >> 5) & 0x3F) << 2,
-        ((p as u32) & 0x1F) << 3,
-    )
-}
-
-#[cfg(feature = "bpp32")]
-fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
-    (
-        (p as u32 >> 16) & 0xFF,
-        (p as u32 >> 8) & 0xFF,
-        (p as u32) & 0xFF,
-    )
-}
-
-#[cfg(feature = "bpp32rgba")]
-fn to_rgb888(p: Pixel) -> (u32, u32, u32) {
-    (p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF)
-}
-
-#[cfg(feature = "bpp16")]
-fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) as Pixel
-}
-
-#[cfg(feature = "bpp32")]
-fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    ((r << 16) | (g << 8) | b) as Pixel
-}
-
-#[cfg(feature = "bpp32rgba")]
-fn rgb888_to_pixel(r: u32, g: u32, b: u32) -> Pixel {
-    r | (g << 8) | (b << 16) | 0xFF000000
-}
-
-fn channels(fg: Pixel, bg: Pixel) -> ((u32, u32, u32), (u32, u32, u32)) {
-    (to_rgb888(fg), to_rgb888(bg))
+fn channels<P: PixelFormat>(fg: P, bg: P) -> ((u32, u32, u32), (u32, u32, u32)) {
+    let (fr, fg_, fb) = fg.to_rgb();
+    let (br, bg_, bb) = bg.to_rgb();
+    ((fr as u32, fg_ as u32, fb as u32), (br as u32, bg_ as u32, bb as u32))
 }
 
 fn rasterise_alpha(
@@ -322,8 +286,8 @@ fn rasterise_alpha(
     });
 }
 
-fn blend_into(
-    dst: &mut [Pixel],
+fn blend_into<P: PixelFormat>(
+    dst: &mut [P],
     alpha: &[u8],
     fg: (u32, u32, u32),
     bg: (u32, u32, u32),
@@ -334,6 +298,6 @@ fn blend_into(
         let r = (fg.0 * a + bg.0 * inv) / 255;
         let g = (fg.1 * a + bg.1 * inv) / 255;
         let b = (fg.2 * a + bg.2 * inv) / 255;
-        *d = rgb888_to_pixel(r, g, b);
+        *d = P::from_rgb(r as u8, g as u8, b as u8);
     }
 }

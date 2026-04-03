@@ -1,4 +1,4 @@
-use crate::{Backend, InputEvent, Pixel};
+use crate::{Backend, InputEvent, PixelFormat};
 use std::fs::OpenOptions;
 use std::mem::size_of;
 use std::os::unix::io::AsRawFd;
@@ -98,7 +98,7 @@ struct FbFixScreenInfo {
     reserved: [u16; 2],
 }
 
-pub struct Framebuf {
+pub struct Framebuf<P: PixelFormat> {
     pub stride: usize,
     pub width: usize,
     pub height: usize,
@@ -108,21 +108,22 @@ pub struct Framebuf {
     input_fd: Option<i32>,
     touch: TouchState,
     events: Vec<InputEvent>,
+    _pixel: std::marker::PhantomData<P>,
 }
 
-impl Framebuf {
+impl<P: PixelFormat> Framebuf<P> {
     /// Slice into the mmap'd pixel buffer.  Lifetime is tied to `&mut self`.
-    fn pixels_mut(&mut self) -> &mut [Pixel] {
+    fn pixels_mut(&mut self) -> &mut [P] {
         unsafe {
             std::slice::from_raw_parts_mut(
-                self.mmap_ptr as *mut Pixel,
-                self.mmap_size / size_of::<Pixel>(),
+                self.mmap_ptr as *mut P,
+                self.mmap_size / size_of::<P>(),
             )
         }
     }
 }
 
-impl Framebuf {
+impl<P: PixelFormat> Framebuf<P> {
     pub fn open(path: &str) -> Result<Self, String> {
         let file = OpenOptions::new()
             .read(true)
@@ -146,7 +147,7 @@ impl Framebuf {
         }
 
         let bpp = vinfo.bits_per_pixel as usize;
-        let pixel_bytes = std::mem::size_of::<Pixel>();
+        let pixel_bytes = size_of::<P>();
         if bpp != pixel_bytes * 8 {
             return Err(format!(
                 "framebuffer is {bpp}bpp but Pixel is {}bpp - recompile or run: fbset -depth {}",
@@ -197,13 +198,14 @@ impl Framebuf {
             input_fd,
             touch: TouchState::new(),
             events: Vec::new(),
+            _pixel: std::marker::PhantomData,
         })
     }
 }
 
-impl Backend for Framebuf {
+impl<P: PixelFormat> Backend<P> for Framebuf<P> {
     #[inline]
-    fn clear(&mut self, color: Pixel) {
+    fn clear(&mut self, color: P) {
         self.pixels_mut().fill(color);
     }
 
@@ -213,7 +215,7 @@ impl Backend for Framebuf {
         y: usize,
         w: usize,
         h: usize,
-        color: Pixel,
+        color: P,
     ) {
         let stride = self.stride;
         let pixels = self.pixels_mut();
@@ -223,14 +225,14 @@ impl Backend for Framebuf {
         }
     }
 
-    fn blit(&mut self, atlas: &dyn crate::Renderer, x: usize, y: usize, text: &str) -> usize {
+    fn blit(&mut self, atlas: &dyn crate::Renderer<P>, x: usize, y: usize, text: &str) -> usize {
         let stride = self.stride;
         let pixels = self.pixels_mut();
         atlas.blit(pixels, stride, x, y, text)
     }
 
 
-    fn blit_alpha(&mut self, icon: &crate::Icon, fg: Pixel, bg: Pixel) {
+    fn blit_alpha(&mut self, icon: &crate::Icon, fg: P, bg: P) {
         let stride = self.stride;
         let pixels = self.pixels_mut();
         crate::blit_alpha_buf(pixels, stride, icon, fg, bg);
@@ -292,7 +294,7 @@ impl Backend for Framebuf {
     }
 }
 
-impl Drop for Framebuf {
+impl<P: PixelFormat> Drop for Framebuf<P> {
     fn drop(&mut self) {
         unsafe {
             if let Some(ifd) = self.input_fd {
@@ -305,8 +307,8 @@ impl Drop for Framebuf {
     }
 }
 
-pub fn init(w: usize, h: usize) -> Box<dyn super::Backend> {
-    let fb = Framebuf::open("/dev/fb0").expect("open framebuffer");
+pub fn init<P: PixelFormat>(w: usize, h: usize) -> Box<dyn super::Backend<P>> {
+    let fb: Framebuf<P> = Framebuf::open("/dev/fb0").expect("open framebuffer");
     assert!(
         fb.width == w && fb.height == h,
         "framebuffer is {}x{} but app expects {}x{}",
