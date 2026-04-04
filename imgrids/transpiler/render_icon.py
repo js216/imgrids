@@ -50,7 +50,7 @@ def main():
         f.write(struct.pack("<HH", w, h))
         f.write(alpha)
 
-    print(f"{svg_path} -> {out_path}  ({w}x{h}, {len(alpha)+4} bytes)")
+    print(f"{svg_path} -> {out_path}  ({w}x{h}, {len(alpha)+4} bytes)", file=sys.stderr)
 
 
 if __name__ == "__main__":
