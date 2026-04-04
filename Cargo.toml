@@ -3,18 +3,22 @@ members = [
     "imgrids",
     "backends/sdl",
     "backends/fb0",
+    "backends/buf",
     "backends/wasm",
     "examples/sdl",
     "examples/fb32",
     "examples/arm",
     "examples/wasm",
+    "tests/snapshot",
 ]
 default-members = [
     "imgrids",
     "backends/sdl",
     "backends/fb0",
+    "backends/buf",
     "examples/sdl",
     "examples/fb32",
+    "tests/snapshot",
 ]
 resolver = "2"
 

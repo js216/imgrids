@@ -1,12 +1,41 @@
 # imgrids
 
-Rust GUI framework for blazing-fast embedded displays and WebAssembly.
-The core library has zero dependencies; backends add only what they need
-(sdl2, libc).  UIs are declared in Lua, transpiled to static Rust -- no
-runtime interpreter.
+Rust GUI framework for embedded displays and WebAssembly. The core library
+has zero dependencies; backends add only what they need (sdl2, libc).
+UIs are declared in Lua, transpiled to static Rust -- no runtime interpreter.
+
+![screenshot](screenshot.png)
+
+## Quick Start
 
 ```bash
-cargo run -p demo-sdl    # build.rs runs the transpiler automatically
+cargo run -p demo-sdl                        # desktop (SDL2)
+
+cargo wasm                                   # build WebAssembly
+python3 -m http.server 8080 -d target/wasm32-unknown-emscripten/debug/
+# open http://localhost:8080/demo.html
+```
+
+`build.rs` runs the Lua transpiler automatically on each build.
+
+## Layout Model
+
+All layout is built from two container types: `"col"` (vertical stack)
+and `"row"` (horizontal stack). Children share space equally by default;
+use `weight` for proportional sizing or `size` for fixed pixels.
+Nest them freely to create any grid:
+
+```lua
+{"row",                              --  ┌─────────┬─────────┐
+    {"col",                          --  │ Top-L   │         │
+        {"Top-L"},                   --  ├─────────┤  Right  │
+        {"Bot-L"},                   --  │ Bot-L   │         │
+    },                               --  ├─────────┼────┬────┤
+    {"col",                          --  │         │ BR │ BR │
+        {"Right", weight = 2},       --  │         │  A │  B │
+        {"row", "BR-A", "BR-B"},     --  └─────────┴────┴────┘
+    },
+}
 ```
 
 ## Lua API
@@ -227,10 +256,11 @@ pub trait Backend<P: PixelFormat> {
 }
 ```
 
-Three backends:
+Four backends:
 - **SDL2** (`imgrids-sdl`) -- `Rgb565`, dirty-rect optimization, mouse + keyboard
 - **Framebuffer** (`imgrids-fb0`) -- generic `P`, mmap'd `/dev/fb0`, touch input
 - **WebAssembly** (`imgrids-wasm`) -- `Rgba8888`, Emscripten canvas
+- **Buffer** (`imgrids-buf`) -- generic `P`, headless `Vec<P>` with PPM export, for testing
 
 Each provides `pub fn init(w, h) -> Box<dyn Backend<P>>`.
 
@@ -287,3 +317,7 @@ Cargo aliases: `cargo sdl`, `cargo fb32`, `cargo arm`, `cargo wasm`.
 
 Transpile: `lua imgrids/transpiler/layout.lua < your_ui.lua`
 (writes per-menu files to `src/ui/`).
+
+## Author
+
+Jakob Kastelic (Stanford Research Systems)

@@ -134,6 +134,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "imgrids-buf"
+version = "0.1.0"
+dependencies = [
+ "imgrids",
+]
+
+[[package]]
 name = "imgrids-fb0"
 version = "0.1.0"
 dependencies = [
@@ -332,6 +339,14 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "snapshot-tests"
+version = "0.1.0"
+dependencies = [
+ "imgrids",
+ "imgrids-buf",
 ]
 
 [[package]]

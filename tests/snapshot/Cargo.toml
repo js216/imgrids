@@ -1,0 +1,8 @@
+[package]
+name = "snapshot-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imgrids = { path = "../../imgrids" }
+imgrids-buf = { path = "../../backends/buf" }
