@@ -310,8 +310,8 @@ impl<P: PixelFormat> Drop for Framebuf<P> {
 pub fn init<P: PixelFormat>(w: usize, h: usize) -> Box<dyn imgrids::Backend<P>> {
     let fb: Framebuf<P> = Framebuf::open("/dev/fb0").expect("open framebuffer");
     assert!(
-        fb.width == w && fb.height == h,
-        "framebuffer is {}x{} but app expects {}x{}",
+        fb.width >= w && fb.height >= h,
+        "framebuffer is {}x{} but app needs at least {}x{}",
         fb.width, fb.height, w, h,
     );
     Box::new(fb)

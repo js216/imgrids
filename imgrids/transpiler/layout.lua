@@ -886,6 +886,11 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				os.exit(1)
 			end
 			local hdr = f:read(4)
+			if not hdr or #hdr < 4 then
+				f:close()
+				io.stderr:write(("ERROR: icon alpha file is empty or corrupt: %s\n"):format(alpha_path))
+				os.exit(1)
+			end
 			local iw = hdr:byte(1) + hdr:byte(2) * 256
 			local ih = hdr:byte(3) + hdr:byte(4) * 256
 			f:close()
