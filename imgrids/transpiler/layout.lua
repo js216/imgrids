@@ -1242,7 +1242,10 @@ end
 if #atlases > 0 then
 	e("use std::sync::OnceLock;")
 end
-e("use std::sync::Mutex;")
+
+-- Check if any menu needs HashSet (for active ops)
+local any_active = false
+
 e("")
 
 -- Generate pre-baked font atlas data via Python script
@@ -1351,58 +1354,56 @@ end
 e("}")
 e("")
 
--- CURRENT_MENU, FOCUSED, LAST_DRAWN_FOCUS, and ACTIVE statics
-e("static CURRENT_MENU: Mutex<Option<Menu>> = Mutex::new(None);")
-e("static FOCUSED: Mutex<Option<usize>> = Mutex::new(None);")
-e("static LAST_DRAWN_FOCUS: Mutex<Option<usize>> = Mutex::new(Some(usize::MAX));")
-e("use std::collections::HashSet;")
-e("use std::sync::LazyLock;")
-e("static ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
-e("static LAST_DRAWN_ACTIVE: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));")
-e("")
-e("// Press coordinates: stored for callbacks that need click position")
-e("static PRESS_X: AtomicUsize = AtomicUsize::new(0);")
-e("static PRESS_RIGHT: AtomicUsize = AtomicUsize::new(0);")
-e("pub fn last_press() -> (usize, usize) { (PRESS_X.load(Ordering::Relaxed), PRESS_RIGHT.load(Ordering::Relaxed)) }")
-e("")
+-------------------------------------------------------------------------------
+-- 6a. Per-menu index assignment (locally numbered per menu)
+-------------------------------------------------------------------------------
+local menu_prog_ops = {}
+local menu_dyn_ops = {}
+local menu_slider_ops = {}
+local menu_chart_ops = {}
+local menu_active_ops = {}
+local menu_derived_ops = {}
 
--- Collect all progress bar and dynamic label ops globally and assign indices
-local all_prog_ops = {}
-local all_dyn_ops = {}
-local all_active_ops = {}
-local all_slider_ops = {}
-local all_chart_ops = {}
-
--- First pass: collect prog/dyn/slider/chart ops and container_active ops
 for _, name in ipairs(menu_names) do
+	menu_prog_ops[name] = {}
+	menu_dyn_ops[name] = {}
+	menu_slider_ops[name] = {}
+	menu_chart_ops[name] = {}
+	menu_active_ops[name] = {}
+	menu_derived_ops[name] = {}
+
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "progress" then
-			all_prog_ops[#all_prog_ops+1] = op
-			op.prog_idx = #all_prog_ops
+			local t = menu_prog_ops[name]
+			t[#t+1] = op
+			op.prog_idx = #t
 		end
 		if op.kind == "slider" then
-			all_slider_ops[#all_slider_ops+1] = op
-			op.slider_idx = #all_slider_ops
+			local t = menu_slider_ops[name]
+			t[#t+1] = op
+			op.slider_idx = #t
 		end
 		if op.kind == "chart" then
-			all_chart_ops[#all_chart_ops+1] = op
-			op.chart_idx = #all_chart_ops
+			local t = menu_chart_ops[name]
+			t[#t+1] = op
+			op.chart_idx = #t
 		end
 		if op.kind == "dynamic" then
-			all_dyn_ops[#all_dyn_ops+1] = op
-			op.dyn_idx = #all_dyn_ops
+			local t = menu_dyn_ops[name]
+			t[#t+1] = op
+			op.dyn_idx = #t
 		end
 	end
 end
 
--- Second pass: collect active ops — only container_active and non-propagated leaf active ops
--- Propagated children reuse their container's active_idx (set during propagation)
+-- Active index assignment (per menu)
 for _, name in ipairs(menu_names) do
 	-- First assign indices to container_active ops
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "container_active" and op.active_style then
-			all_active_ops[#all_active_ops+1] = op
-			op.active_idx = #all_active_ops
+			local t = menu_active_ops[name]
+			t[#t+1] = op
+			op.active_idx = #t
 			op.active_menu = name
 		end
 	end
@@ -1426,16 +1427,21 @@ for _, name in ipairs(menu_names) do
 			end
 			-- Non-propagated leaf with its own active_style
 			if not op.active_idx then
-				all_active_ops[#all_active_ops+1] = op
-				op.active_idx = #all_active_ops
+				local t = menu_active_ops[name]
+				t[#t+1] = op
+				op.active_idx = #t
 				op.active_menu = name
 			end
 		end
 	end
+
+	if #menu_active_ops[name] > 0 then
+		any_active = true
+	end
 end
--- Collect set_stay buttons for auto-active: when param changes, auto-activate matching button
--- Groups: menu -> param -> [{value, active_idx}]
-local auto_active = {}  -- [menu][param] = {{value, idx}, ...}
+
+-- Collect set_stay buttons for auto-active (per menu)
+local auto_active = {}
 for _, name in ipairs(menu_names) do
 	auto_active[name] = {}
 	for _, op in ipairs(menu_ops[name]) do
@@ -1454,74 +1460,15 @@ for _, name in ipairs(menu_names) do
 	end
 end
 
--- Collect derived label ops and assign indices
-local all_derived_ops = {}
+-- Derived label ops (per menu)
 for _, name in ipairs(menu_names) do
 	for _, op in ipairs(menu_ops[name]) do
 		if op.kind == "dynamic" and op.derived then
-			all_derived_ops[#all_derived_ops+1] = op
-			op.derived_idx = #all_derived_ops
+			local t = menu_derived_ops[name]
+			t[#t+1] = op
+			op.derived_idx = #t
 		end
 	end
-end
-
-local need_atomics = #all_prog_ops + #all_dyn_ops + #all_slider_ops + #all_chart_ops > 0
-if need_atomics then
-	e("use std::sync::atomic::{AtomicUsize, Ordering};")
-	for i = 1, #all_prog_ops do
-		e("static PROG_%d_PREV: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
-	end
-	for i = 1, #all_dyn_ops do
-		e("static DYN_%d_END: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
-	end
-	for i, op in ipairs(all_slider_ops) do
-		e("static SLIDER_%d_PREV: AtomicUsize = AtomicUsize::new(usize::MAX);", i)
-		-- Ribbon pixel data: one RGB per x position
-		local parts = {}
-		for _, c in ipairs(op.ribbon) do
-			parts[#parts+1] = rgb_lit(c)
-		end
-		e("static SLIDER_%d_RIBBON: &[Pixel] = &[%s];", i, table.concat(parts, ", "))
-	end
-	for i, op in ipairs(all_chart_ops) do
-		e("static CHART_%d_DATA: Mutex<Vec<f64>> = Mutex::new(Vec::new());", i)
-		e("static CHART_%d_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);", i)
-	end
-	e("")
-end
-
--- Derived label statics: store last value per constituent param
--- Initialize with formatted default values from params.txt so derived labels render on first frame
-if #all_derived_ops > 0 then
-	for _, op in ipairs(all_derived_ops) do
-		for j, src in ipairs(op.derived.sources) do
-			local default = ""
-			if type(params) == "table" then
-				for _, p in ipairs(params) do
-					if p.name == src and p.default ~= nil then
-						-- Use formatted default: for enums, look up option name
-						if p.opts and type(p.default) == "number" then
-							local idx = p.default + 1 -- Lua is 1-indexed
-							if p.opts[idx] then
-								default = p.opts[idx]
-							else
-								default = tostring(p.default)
-							end
-						else
-							default = tostring(p.default)
-						end
-						break
-					end
-				end
-			end
-			if default ~= "" then
-				e("static DERIVED_%d_%d: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(%q.to_owned()));", op.derived_idx, j, default)
-			else
-				e("static DERIVED_%d_%d: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));", op.derived_idx, j)
-			end
-		end
-	end
-	e("")
 end
 
 -- Collect callbacks: map fn_name -> max_nargs
@@ -1567,67 +1514,9 @@ e("    }")
 e("}")
 e("")
 
--- update_events<C: Callbacks>()
-e("pub fn update_events<C: Callbacks>(events: &[InputEvent], state: &mut C) {")
-e("    for ev in events {")
-e("        if let InputEvent::Quit = ev { state.quit(); return; }")
-e("    }")
-e("    match *CURRENT_MENU.lock().unwrap() {")
-for _, name in ipairs(menu_names) do
-	e("        Some(Menu::%s) => update_events_%s(events, state),", name, name:lower())
-end
-e("        None => {}")
-e("    }")
-e("}")
-e("")
-
--- update_menu()
-e("pub fn update_menu(backend: &mut dyn Backend<Pixel>, menu: Menu) {")
-e("    let mut current = CURRENT_MENU.lock().unwrap();")
-e("    if *current != Some(menu) {")
-e("        *current = Some(menu);")
-e("        drop(current);")
-e("        *FOCUSED.lock().unwrap() = None;")
-e("        *LAST_DRAWN_FOCUS.lock().unwrap() = None;")
-e("        ACTIVE.lock().unwrap().clear();")
-e("        LAST_DRAWN_ACTIVE.lock().unwrap().clear();")
-for i = 1, #all_prog_ops do
-	e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
-end
-for i = 1, #all_slider_ops do
-	e("        SLIDER_%d_PREV.store(usize::MAX, Ordering::Relaxed);", i)
-end
-for i = 1, #all_chart_ops do
-	e("        CHART_%d_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);", i)
-end
-for i = 1, #all_dyn_ops do
-	e("        DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", i)
-end
-e("        match menu {")
-for _, name in ipairs(menu_names) do
-	e("            Menu::%s => draw_%s(backend),", name, name:lower())
-end
-e("        }")
-e("    }")
-e("}")
-e("")
-
-e("pub fn force_redraw() {")
-e("    *CURRENT_MENU.lock().unwrap() = None;")
-e("}")
-e("")
-
--- update_params()
-e("pub fn update_params(backend: &mut dyn Backend<Pixel>, changes: &[(&str, &str)]) {")
-e("    match *CURRENT_MENU.lock().unwrap() {")
-for _, name in ipairs(menu_names) do
-	e("        Some(Menu::%s) => update_params_%s(backend, changes),", name, name:lower())
-end
-e("        None => {}")
-e("    }")
-e("    backend.flush();")
-e("}")
-e("")
+-------------------------------------------------------------------------------
+-- 6b. Helper functions
+-------------------------------------------------------------------------------
 
 -- Helper: emit a static text blit with pixel-perfect alignment
 local function emit_static_blit(indent, atlas_fn, align, text_x, inner_w, y, line)
@@ -1644,58 +1533,7 @@ local function emit_static_blit(indent, atlas_fn, align, text_x, inner_w, y, lin
 	end
 end
 
--- draw_<menu>() per-menu functions
-for _, name in ipairs(menu_names) do
-	e("fn draw_%s(backend: &mut dyn Backend<Pixel>) {", name:lower())
-	e("    backend.fill_rect(0, 0, %d, %d, %s);", screen.width, screen.height, rgb_lit(default_style.bg))
-	for _, op in ipairs(menu_ops[name]) do
-		if op.kind == "icon" then
-			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-			e("    backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
-				op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.bg))
-		elseif op.kind == "static" then
-			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
-			for i, line in ipairs(op.lines) do
-				local y = op.text_y + (i - 1) * op.line_step
-				emit_static_blit("    ", op.atlas.fn_name, op.align,
-					op.text_x, op.inner_w, y, line)
-			end
-		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" or op.kind == "chart" then
-			local bg = op.atlas and op.atlas.bg or op.bg
-			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
-		elseif op.kind == "fill" then
-			e("    backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.color))
-		elseif op.kind == "border" then
-			if op.side then
-				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
-				local sides = type(op.side) == "table" and op.side or {op.side}
-				for _, s in ipairs(sides) do
-					if s == "top" then
-						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, w, t, c)
-					elseif s == "bottom" then
-						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y + h - t, w, t, c)
-					elseif s == "left" then
-						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, t, h, c)
-					elseif s == "right" then
-						e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
-					end
-				end
-			else
-				local x, y, w, h, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
-				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, w, t, c)
-				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y + h - t, w, t, c)
-				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x, y, t, h, c)
-				e("    backend.fill_rect(%d, %d, %d, %d, %s);", x + w - t, y, t, h, c)
-			end
-		end
-	end
-	e("}")
-	e("")
-end
-
 -- Helper: collect focusable ops, assign focus indices.
--- Explicit focus_index values are respected; others are auto-assigned.
--- Multiple ops with the same explicit focus_index form a focus group.
 local function get_focusable_ops(ops)
 	local raw = {}
 	for _, op in ipairs(ops) do
@@ -1703,12 +1541,10 @@ local function get_focusable_ops(ops)
 			raw[#raw + 1] = op
 		end
 	end
-	-- Collect explicitly assigned indices
 	local explicit = {}
 	for _, op in ipairs(raw) do
 		if op.focus_index then explicit[op.focus_index] = true end
 	end
-	-- Auto-assign indices to ops without explicit focus_index
 	local next_auto = 0
 	for _, op in ipairs(raw) do
 		if not op.focus_index then
@@ -1717,23 +1553,22 @@ local function get_focusable_ops(ops)
 			next_auto = next_auto + 1
 		end
 	end
-	-- Sort by focus_index so draw order is deterministic
 	table.sort(raw, function(a, b) return a.focus_index < b.focus_index end)
 	return raw
 end
 
--- Helper: emit blit code for a single dynamic label
+-- Helper: emit blit code for a single dynamic label (using self.field access)
 local function emit_dyn_blit(op, indent, val_expr)
 	val_expr = val_expr or "val"
 	local ch = cell_height_est(op.atlas.font)
 	local bg = rgb_lit(op.atlas.bg)
 	local atlas_fn = op.atlas.fn_name
-	local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
+	local dyn_end = ("self.dyn_%d_end"):format(op.dyn_idx)
 	-- Dynamic nodes inside active containers: bg and atlas depend on active state
 	if op.active_idx then
 		local act_bg = op.active_style.bg and rgb_lit(op.active_style.bg) or bg
 		local act_atlas = op.active_atlas and op.active_atlas.fn_name or atlas_fn
-		e("%slet is_active = ACTIVE.lock().unwrap().contains(&%d);", indent, op.active_idx)
+		e("%slet is_active = self.active.contains(&%d);", indent, op.active_idx)
 		e("%slet bg = if is_active { %s } else { %s };", indent, act_bg, bg)
 		if act_atlas ~= atlas_fn then
 			e("%slet a = if is_active { %s() } else { %s() };", indent, act_atlas, atlas_fn)
@@ -1746,13 +1581,12 @@ local function emit_dyn_blit(op, indent, val_expr)
 
 	-- Multi-color/font support: \x01-\x09 select alternate atlas, \x00 restores default
 	if op.alt_atlases and #op.alt_atlases > 0 then
-		-- Build atlas array
 		local alt_fns = {}
 		for _, a in ipairs(op.alt_atlases) do
 			alt_fns[#alt_fns+1] = ("%s()"):format(a.fn_name)
 		end
 		e("%s{", indent)
-		e("%s    let prev_end = %s.load(Ordering::Relaxed);", indent, dyn_end)
+		e("%s    let prev_end = %s;", indent, dyn_end)
 		e("%s    let clear_w = if prev_end == usize::MAX { %d } else { prev_end.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
 		local clear_h = op.h - (op.text_y - op.y)
@@ -1785,7 +1619,7 @@ local function emit_dyn_blit(op, indent, val_expr)
 		e("%s        let s: String = c.to_string();", indent)
 		e("%s        cx = backend.blit(cur, cx, cy, &s);", indent)
 		e("%s    }", indent)
-		e("%s    %s.store(cx, Ordering::Relaxed);", indent, dyn_end)
+		e("%s    %s = cx;", indent, dyn_end)
 		e("%s}", indent)
 		return
 	end
@@ -1800,7 +1634,7 @@ local function emit_dyn_blit(op, indent, val_expr)
 			e("%slet end_x = backend.blit_clipped(%s(), %d, %d, val, %d);",
 				indent, atlas_fn, op.text_x, op.text_y, op.text_x + op.inner_w)
 		end
-		e("%slet prev = %s.swap(end_x, Ordering::Relaxed);", indent, dyn_end)
+		e("%slet prev = %s; %s = end_x;", indent, dyn_end, dyn_end)
 		e("%sif prev != usize::MAX && prev > end_x {", indent)
 		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
 		e("%s}", indent)
@@ -1809,7 +1643,7 @@ local function emit_dyn_blit(op, indent, val_expr)
 		if not use_local_a then
 			e("%slet a = %s();", indent, atlas_fn)
 		end
-		e("%slet prev = %s.load(Ordering::Relaxed);", indent, dyn_end)
+		e("%slet prev = %s;", indent, dyn_end)
 		e("%slet clear_w = if prev == usize::MAX { %d } else { prev.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
 		e("%sbackend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, ch, bg)
@@ -1823,11 +1657,11 @@ local function emit_dyn_blit(op, indent, val_expr)
 				indent, op.text_x, op.inner_w)
 		end
 		e("%slet end_x = backend.blit(a, bx, %d, val);", indent, op.text_y)
-		e("%s%s.store(end_x, Ordering::Relaxed);", indent, dyn_end)
+		e("%s%s = end_x;", indent, dyn_end)
 	end
 end
 
--- Helper: emit border drawing lines (fill_rect or draw_border)
+-- Helper: emit border drawing lines
 local function emit_border(indent, op_x, op_y, op_w, op_h, b)
 	if b.width == 0 then
 		return
@@ -1856,91 +1690,275 @@ local function emit_border(indent, op_x, op_y, op_w, op_h, b)
 	end
 end
 
--- draw_focus_<menu>() per-menu focus redraw functions
+-------------------------------------------------------------------------------
+-- 6c. Per-menu modules
+-------------------------------------------------------------------------------
+
 for _, name in ipairs(menu_names) do
-	local fops = get_focusable_ops(menu_ops[name])
-	if #fops > 0 then
-		e("fn draw_focus_%s(backend: &mut dyn Backend<Pixel>, prev: Option<usize>, focused: Option<usize>) {", name:lower())
+	local ops = menu_ops[name]
+	local m_prog_ops = menu_prog_ops[name]
+	local m_dyn_ops = menu_dyn_ops[name]
+	local m_slider_ops = menu_slider_ops[name]
+	local m_chart_ops = menu_chart_ops[name]
+	local m_active_ops = menu_active_ops[name]
+	local m_derived_ops = menu_derived_ops[name]
+	local fops = get_focusable_ops(ops)
+
+	local has_active = #m_active_ops > 0
+	local has_focus = #fops > 0
+
+	e("mod menu_%s {", name:lower())
+	e("    use super::*;")
+	if has_active then
+		e("    use std::collections::HashSet;")
+	end
+	e("")
+
+	-- Slider ribbon constants
+	for i, op in ipairs(m_slider_ops) do
+		local parts = {}
+		for _, c in ipairs(op.ribbon) do
+			parts[#parts+1] = rgb_lit(c)
+		end
+		e("    const SLIDER_%d_RIBBON: &[Pixel] = &[%s];", i, table.concat(parts, ", "))
+	end
+	if #m_slider_ops > 0 then e("") end
+
+	-- State struct
+	e("    pub(super) struct State {")
+	e("        pub(super) focused: Option<usize>,")
+	e("        last_drawn_focus: Option<usize>,")
+	if has_active then
+		e("        pub(super) active: HashSet<usize>,")
+		e("        last_drawn_active: HashSet<usize>,")
+	end
+	for i = 1, #m_prog_ops do
+		e("        prog_%d_prev: usize,", i)
+	end
+	for i = 1, #m_dyn_ops do
+		e("        dyn_%d_end: usize,", i)
+	end
+	for i = 1, #m_slider_ops do
+		e("        slider_%d_prev: usize,", i)
+	end
+	for i = 1, #m_chart_ops do
+		e("        chart_%d_data: Vec<f64>,", i)
+		e("        chart_%d_dirty: bool,", i)
+	end
+	for _, op in ipairs(m_derived_ops) do
+		for j = 1, #op.derived.sources do
+			e("        derived_%d_%d: String,", op.derived_idx, j)
+		end
+	end
+	e("    }")
+	e("")
+
+	-- State::new()
+	e("    impl State {")
+	e("    pub(super) fn new() -> Self {")
+	e("        State {")
+	e("            focused: None,")
+	e("            last_drawn_focus: None,")
+	if has_active then
+		e("            active: HashSet::new(),")
+		e("            last_drawn_active: HashSet::new(),")
+	end
+	for i = 1, #m_prog_ops do
+		e("            prog_%d_prev: usize::MAX,", i)
+	end
+	for i = 1, #m_dyn_ops do
+		e("            dyn_%d_end: usize::MAX,", i)
+	end
+	for i = 1, #m_slider_ops do
+		e("            slider_%d_prev: usize::MAX,", i)
+	end
+	for i = 1, #m_chart_ops do
+		e("            chart_%d_data: Vec::new(),", i)
+		e("            chart_%d_dirty: true,", i)
+	end
+	-- Derived label defaults from params.txt
+	for _, op in ipairs(m_derived_ops) do
+		for j, src in ipairs(op.derived.sources) do
+			local default = ""
+			if type(params) == "table" then
+				for _, p in ipairs(params) do
+					if p.name == src and p.default ~= nil then
+						if p.opts and type(p.default) == "number" then
+							local idx = p.default + 1
+							if p.opts[idx] then
+								default = p.opts[idx]
+							else
+								default = tostring(p.default)
+							end
+						else
+							default = tostring(p.default)
+						end
+						break
+					end
+				end
+			end
+			if default ~= "" then
+				e("            derived_%d_%d: %q.to_owned(),", op.derived_idx, j, default)
+			else
+				e("            derived_%d_%d: String::new(),", op.derived_idx, j)
+			end
+		end
+	end
+	e("        }")
+	e("    }")
+	e("")
+
+	-- State::reset()
+	e("    pub(super) fn reset(&mut self) {")
+	e("        self.focused = None;")
+	e("        self.last_drawn_focus = None;")
+	if has_active then
+		e("        self.active.clear();")
+		e("        self.last_drawn_active.clear();")
+	end
+	for i = 1, #m_prog_ops do
+		e("        self.prog_%d_prev = usize::MAX;", i)
+	end
+	for i = 1, #m_dyn_ops do
+		e("        self.dyn_%d_end = usize::MAX;", i)
+	end
+	for i = 1, #m_slider_ops do
+		e("        self.slider_%d_prev = usize::MAX;", i)
+	end
+	for i = 1, #m_chart_ops do
+		e("        self.chart_%d_dirty = true;", i)
+	end
+	e("    }")
+	e("")
+
+	-- State::draw()
+	e("    pub(super) fn draw(&self, backend: &mut dyn Backend<Pixel>) {")
+	e("        backend.fill_rect(0, 0, %d, %d, %s);", screen.width, screen.height, rgb_lit(default_style.bg))
+	for _, op in ipairs(ops) do
+		if op.kind == "icon" then
+			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+			e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+				op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.bg))
+		elseif op.kind == "static" then
+			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
+			for i, line in ipairs(op.lines) do
+				local y = op.text_y + (i - 1) * op.line_step
+				emit_static_blit("        ", op.atlas.fn_name, op.align,
+					op.text_x, op.inner_w, y, line)
+			end
+		elseif op.kind == "dynamic" or op.kind == "progress" or op.kind == "slider" or op.kind == "chart" then
+			local bg = op.atlas and op.atlas.bg or op.bg
+			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(bg))
+		elseif op.kind == "fill" then
+			e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.color))
+		elseif op.kind == "border" then
+			if op.side then
+				local bx, by, bw, bh, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
+				local sides = type(op.side) == "table" and op.side or {op.side}
+				for _, s in ipairs(sides) do
+					if s == "top" then
+						e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by, bw, t, c)
+					elseif s == "bottom" then
+						e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by + bh - t, bw, t, c)
+					elseif s == "left" then
+						e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by, t, bh, c)
+					elseif s == "right" then
+						e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx + bw - t, by, t, bh, c)
+					end
+				end
+			else
+				local bx, by, bw, bh, t, c = op.x, op.y, op.w, op.h, op.thickness, rgb_lit(op.color)
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by, bw, t, c)
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by + bh - t, bw, t, c)
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx, by, t, bh, c)
+				e("        backend.fill_rect(%d, %d, %d, %d, %s);", bx + bw - t, by, t, bh, c)
+			end
+		end
+	end
+	e("    }")
+	e("")
+
+	-- State::draw_focus()
+	if has_focus then
+		e("    fn draw_focus(&mut self, backend: &mut dyn Backend<Pixel>, prev: Option<usize>, focused: Option<usize>) {")
 		for fi, op in ipairs(fops) do
 			local idx = op.focus_index
-			e("    if focused == Some(%d) && prev != Some(%d) {", idx, idx)
+			e("        if focused == Some(%d) && prev != Some(%d) {", idx, idx)
 			if op.kind == "progress" then
-				-- Progress bar: just draw border for focus
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
-				-- Force progress bar redraw
-				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("            ", op.x, op.y, op.w, op.h, op.foc.border)
+				e("            self.prog_%d_prev = usize::MAX;", op.prog_idx)
 			elseif op.kind == "chart" then
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("            ", op.x, op.y, op.w, op.h, op.foc.border)
 			elseif op.kind == "icon" then
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
-				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
+				e("            backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
 					op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.foc.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
+				emit_border("            ", op.x, op.y, op.w, op.h, op.foc.border)
 			else
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.foc.bg))
 				if op.kind == "static" then
 					for i, line in ipairs(op.lines) do
 						local y = op.foc.text_y + (i - 1) * op.foc.line_step
-						emit_static_blit("        ", op.foc.atlas.fn_name, op.foc.align,
+						emit_static_blit("            ", op.foc.atlas.fn_name, op.foc.align,
 							op.foc.text_x, op.foc.inner_w, y, line)
 					end
 				end
-				emit_border("        ", op.x, op.y, op.w, op.h, op.foc.border)
+				emit_border("            ", op.x, op.y, op.w, op.h, op.foc.border)
 			end
-			e("    }")
-			e("    if prev == Some(%d) && focused != Some(%d) {", idx, idx)
+			e("        }")
+			e("        if prev == Some(%d) && focused != Some(%d) {", idx, idx)
 			if op.kind == "progress" then
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
-				e("        PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("            ", op.x, op.y, op.w, op.h, op.normal_border)
+				e("            self.prog_%d_prev = usize::MAX;", op.prog_idx)
 			elseif op.kind == "chart" then
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				emit_border("            ", op.x, op.y, op.w, op.h, op.normal_border)
 			elseif op.kind == "icon" then
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
-				e("        backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.bg))
+				e("            backend.blit_alpha(&Icon { x: %d, y: %d, w: %d, h: %d, alpha: &include_bytes!(%q)[4..] }, %s, %s);",
 					op.ix, op.iy, op.iw, op.ih, op.abs_icon_path, rgb_lit(op.fg), rgb_lit(op.bg))
-				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
+				emit_border("            ", op.x, op.y, op.w, op.h, op.normal_border)
 			else
-				e("        backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
+				e("            backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, rgb_lit(op.atlas.bg))
 				if op.kind == "static" then
 					for i, line in ipairs(op.lines) do
 						local y = op.text_y + (i - 1) * op.line_step
-						emit_static_blit("        ", op.atlas.fn_name, op.align,
+						emit_static_blit("            ", op.atlas.fn_name, op.align,
 							op.text_x, op.inner_w, y, line)
 					end
 				end
-				emit_border("        ", op.x, op.y, op.w, op.h, op.normal_border)
+				emit_border("            ", op.x, op.y, op.w, op.h, op.normal_border)
 			end
-			e("    }")
+			e("        }")
 		end
-		e("}")
+		e("    }")
 		e("")
 	end
-end
 
--- update_events_<menu><C: Callbacks>() per-menu functions
-for _, name in ipairs(menu_names) do
-	local ops = menu_ops[name]
+	-- State::update_events()
 	local press_ops = {}
 	for _, op in ipairs(ops) do
 		if op.press then
 			press_ops[#press_ops + 1] = op
 		end
 	end
-	local fops = get_focusable_ops(ops)
 	local has_press = #press_ops > 0
-	local has_focus = #fops > 0
 
 	local ev_param = (has_press or has_focus) and "events" or "_events"
 	local st_param = has_press and "state" or "_state"
-	e("fn update_events_%s<C: Callbacks>(%s: &[InputEvent], %s: &mut C) {", name:lower(), ev_param, st_param)
+	local needs_press = false
+	for _, op in ipairs(press_ops) do
+		if op.press[1] == "select_digit" then needs_press = true; break end
+	end
+	local press_param = needs_press and "press" or "_press"
+	e("    pub(super) fn update_events<C: Callbacks>(&mut self, %s: &[InputEvent], %s: &mut C, %s: &mut (usize, usize)) {", ev_param, st_param, press_param)
 
 	if has_press or has_focus then
-		e("    for ev in events {")
-		e("        if let InputEvent::Press { x, y } = ev {")
+		e("        for ev in events {")
+		e("            if let InputEvent::Press { x, y } = ev {")
 
 		if has_focus then
 			if #fops == 1 then
@@ -1948,7 +1966,7 @@ for _, name in ipairs(menu_names) do
 				local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
 				local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
 				e(
-					"            *FOCUSED.lock().unwrap() = if %s*x < %d && %s*y < %d { Some(%d) } else { None };",
+					"                self.focused = if %s*x < %d && %s*y < %d { Some(%d) } else { None };",
 					x_lo,
 					op.x + op.w,
 					y_lo,
@@ -1956,7 +1974,6 @@ for _, name in ipairs(menu_names) do
 					op.focus_index
 				)
 			else
-				-- Group ops by focus_index, compute bounding box per group
 				local groups = {}
 				local group_order = {}
 				for _, op in ipairs(fops) do
@@ -1972,16 +1989,16 @@ for _, name in ipairs(menu_names) do
 						g.y2 = math.max(g.y2, op.y + op.h)
 					end
 				end
-				e("            let new_focus =")
+				e("                let new_focus =")
 				for gi, idx in ipairs(group_order) do
 					local g = groups[idx]
 					local x_lo = g.x > 0 and ("*x >= %d && "):format(g.x) or ""
 					local y_lo = g.y > 0 and ("*y >= %d && "):format(g.y) or ""
-					local prefix = gi == 1 and "                if " or "                else if "
+					local prefix = gi == 1 and "                    if " or "                    else if "
 					e("%s%s*x < %d && %s*y < %d { Some(%d) }", prefix, x_lo, g.x2, y_lo, g.y2, idx)
 				end
-				e("                else { None };")
-				e("            *FOCUSED.lock().unwrap() = new_focus;")
+				e("                    else { None };")
+				e("                self.focused = new_focus;")
 			end
 		end
 
@@ -1990,35 +2007,32 @@ for _, name in ipairs(menu_names) do
 				local fn_name = op.press[1]
 				local x_lo = op.x > 0 and ("*x >= %d && "):format(op.x) or ""
 				local y_lo = op.y > 0 and ("*y >= %d && "):format(op.y) or ""
-				e("            if %s*x < %d && %s*y < %d {", x_lo, op.x + op.w, y_lo, op.y + op.h)
+				e("                if %s*x < %d && %s*y < %d {", x_lo, op.x + op.w, y_lo, op.y + op.h)
 				if fn_name == "select_digit" then
-					e("                PRESS_X.store(*x, Ordering::Relaxed);")
-					e("                PRESS_RIGHT.store(%d, Ordering::Relaxed);", op.x + op.w)
+					e("                    press.0 = *x;")
+					e("                    press.1 = %d;", op.x + op.w)
 				end
 				if callbacks[fn_name] > 0 then
 					local args = {}
 					for i = 2, #op.press do
 						args[#args + 1] = ("%q"):format(op.press[i])
 					end
-					e("                state.%s(&[%s]);", fn_name, table.concat(args, ", "))
+					e("                    state.%s(&[%s]);", fn_name, table.concat(args, ", "))
 				else
-					e("                state.%s();", fn_name)
+					e("                    state.%s();", fn_name)
 				end
-				e("            }")
+				e("                }")
 			end
 		end
 
+		e("            }")
 		e("        }")
-		e("    }")
 	end
 
-	e("}")
+	e("    }")
 	e("")
-end
 
--- update_changes_<menu>() per-menu functions
-for _, name in ipairs(menu_names) do
-	local ops = menu_ops[name]
+	-- State::update_params()
 	local dyn_ops = {}
 	local prog_ops = {}
 	local chart_ops = {}
@@ -2033,7 +2047,6 @@ for _, name in ipairs(menu_names) do
 			chart_ops[#chart_ops + 1] = op
 		end
 	end
-	local fops = get_focusable_ops(ops)
 
 	local aa = auto_active[name]
 	local aa_params = {}
@@ -2043,7 +2056,7 @@ for _, name in ipairs(menu_names) do
 	local has_content = #dyn_ops + #prog_ops + #chart_ops + #fops + (has_auto_active and 1 or 0)
 	local be_param = has_content > 0 and "backend" or "_backend"
 	local chg_param = (#dyn_ops + #prog_ops + #chart_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
-	e("fn update_params_%s(%s: &mut dyn Backend<Pixel>, %s: &[(&str, &str)]) {", name:lower(), be_param, chg_param)
+	e("    pub(super) fn update_params(&mut self, %s: &mut dyn Backend<Pixel>, %s: &[(&str, &str)]) {", be_param, chg_param)
 
 	-- Derived labels: watch constituent params and rebuild
 	local derived_ops = {}
@@ -2051,37 +2064,29 @@ for _, name in ipairs(menu_names) do
 		if op.derived then derived_ops[#derived_ops+1] = op end
 	end
 	for _, op in ipairs(derived_ops) do
-		local src_checks = {}
-		for _, src in ipairs(op.derived.sources) do
-			src_checks[#src_checks+1] = ("n == %q"):format(src)
-		end
-		local dyn_end = ("DYN_%d_END"):format(op.dyn_idx)
-		e("    {")
-		e("        let mut dirty = %s.load(Ordering::Relaxed) == usize::MAX;", dyn_end)
-		e("        for &(n, v) in changes {")
+		local dyn_end = ("self.dyn_%d_end"):format(op.dyn_idx)
+		e("        {")
+		e("            let mut dirty = %s == usize::MAX;", dyn_end)
+		e("            for &(n, v) in changes {")
 		for j, src in ipairs(op.derived.sources) do
-			e("            if n == %q { *DERIVED_%d_%d.lock().unwrap() = v.to_owned(); dirty = true; }", src, op.derived_idx, j)
+			e("                if n == %q { self.derived_%d_%d = v.to_owned(); dirty = true; }", src, op.derived_idx, j)
 		end
-		e("        }")
-		e("        if dirty {")
-		-- Compute the derived value
+		e("            }")
+		e("            if dirty {")
 		if op.derived.fn_name == "dots" then
-			-- Special: repeat "·" (value+1) times
-			e("            let idx: usize = DERIVED_%d_1.lock().unwrap().parse().unwrap_or(0);", op.derived_idx)
-			e("            let val = \"\\u{00B7}\".repeat(idx + 1);")
+			e("                let idx: usize = self.derived_%d_1.parse().unwrap_or(0);", op.derived_idx)
+			e("                let val = \"\\u{00B7}\".repeat(idx + 1);")
 		elseif op.derived.sep then
-			-- Join constituent values with separator (values are already formatted by format_values)
 			local parts = {}
 			for j, src in ipairs(op.derived.sources) do
-				parts[#parts+1] = ("DERIVED_%d_%d.lock().unwrap().clone()"):format(op.derived_idx, j)
+				parts[#parts+1] = ("self.derived_%d_%d.clone()"):format(op.derived_idx, j)
 			end
-			e("            let val = [%s].join(%q);", table.concat(parts, ", "), op.derived.sep)
+			e("                let val = [%s].join(%q);", table.concat(parts, ", "), op.derived.sep)
 		end
-		e("            let val: &str = &val;")
-		-- Render via emit_dyn_blit logic (inline the rendering)
-		emit_dyn_blit(op, "            ")
+		e("                let val: &str = &val;")
+		emit_dyn_blit(op, "                ")
+		e("            }")
 		e("        }")
-		e("    }")
 	end
 
 	-- Filter out derived ops from normal dyn processing
@@ -2091,7 +2096,6 @@ for _, name in ipairs(menu_names) do
 	end
 
 	if #normal_dyn_ops > 0 then
-		-- Guard behind a check for matching label names (deduplicated)
 		local seen_lbl = {}
 		local conds = {}
 		for _, op in ipairs(normal_dyn_ops) do
@@ -2100,31 +2104,30 @@ for _, name in ipairs(menu_names) do
 				conds[#conds+1] = ("n == %q"):format(op.lbl)
 			end
 		end
-		e("    if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
-		e("        for &(name, val) in changes {")
+		e("        if changes.iter().any(|&(n, _)| %s) {", table.concat(conds, " || "))
+		e("            for &(name, val) in changes {")
 		for _, op in ipairs(normal_dyn_ops) do
-			e("            if name == %q {", op.lbl)
-			emit_dyn_blit(op, "                ")
-			e("            }")
+			e("                if name == %q {", op.lbl)
+			emit_dyn_blit(op, "                    ")
+			e("                }")
 		end
+		e("            }")
 		e("        }")
-		e("    }")
 	end
 
 	if #prog_ops > 0 then
-		e("    for &(name, val) in changes {")
+		e("        for &(name, val) in changes {")
 		for _, op in ipairs(prog_ops) do
 			local x_prev = op.px > 0 and ("%d + prev"):format(op.px) or "prev"
 			local x_filled = op.px > 0 and ("%d + filled"):format(op.px) or "filled"
-			e("        if name == %q {", op.lbl)
+			e("            if name == %q {", op.lbl)
 			if op.bidir then
-				-- Bidirectional bar: value "s-0.5" = symmetric at -0.5, "0.3" = standard at 0.3
 				local bg = rgb_lit(op.bg)
-				e("            let (sym, v_raw) = if let Some(s) = val.strip_prefix('s') {")
-				e("                (true, s.parse::<f32>().unwrap_or(0.0))")
-				e("            } else {")
-				e("                (false, val.parse::<f32>().unwrap_or(0.0))")
-				e("            };")
+				e("                let (sym, v_raw) = if let Some(s) = val.strip_prefix('s') {")
+				e("                    (true, s.parse::<f32>().unwrap_or(0.0))")
+				e("                } else {")
+				e("                    (false, val.parse::<f32>().unwrap_or(0.0))")
+				e("                };")
 				local fg
 				if op.overload then
 					fg = ("if (sym && v_raw.abs() >= 1.0) || (!sym && v_raw >= 1.0) { %s } else { %s }"):format(
@@ -2132,29 +2135,28 @@ for _, name in ipairs(menu_names) do
 				else
 					fg = rgb_lit(op.fg)
 				end
-				e("            let fg = %s;", fg)
-				e("            let bg = %s;", bg)
-				e("            let v = if sym { v_raw.clamp(-1.0, 1.0) } else { v_raw.clamp(0.0, 1.0) };")
-				e("            PROG_%d_PREV.store(0, Ordering::Relaxed);", op.prog_idx)
-				e("            backend.fill_rect(%d, %d, %d, %d, bg);", op.px, op.py, op.pw, op.ph)
-				e("            if sym {")
-				e("                let center = %d_usize;", math.floor(op.pw / 2))
-				e("                let fill = (center as f32 * v.abs()) as usize;")
-				e("                if v >= 0.0 { if fill > 0 { backend.fill_rect(%d + center, %d, fill.min(%d - center), %d, fg); } }", op.px, op.py, op.pw, op.ph)
-				e("                else { if fill > 0 { backend.fill_rect(%d + center - fill, %d, fill, %d, fg); } }", op.px, op.py, op.ph)
-				-- no center marker
-				e("            } else {")
-				e("                let filled = (%d.0_f32 * v) as usize;", op.pw)
-				e("                if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
-				e("            }")
+				e("                let fg = %s;", fg)
+				e("                let bg = %s;", bg)
+				e("                let v = if sym { v_raw.clamp(-1.0, 1.0) } else { v_raw.clamp(0.0, 1.0) };")
+				e("                self.prog_%d_prev = 0;", op.prog_idx)
+				e("                backend.fill_rect(%d, %d, %d, %d, bg);", op.px, op.py, op.pw, op.ph)
+				e("                if sym {")
+				e("                    let center = %d_usize;", math.floor(op.pw / 2))
+				e("                    let fill = (center as f32 * v.abs()) as usize;")
+				e("                    if v >= 0.0 { if fill > 0 { backend.fill_rect(%d + center, %d, fill.min(%d - center), %d, fg); } }", op.px, op.py, op.pw, op.ph)
+				e("                    else { if fill > 0 { backend.fill_rect(%d + center - fill, %d, fill, %d, fg); } }", op.px, op.py, op.ph)
+				e("                } else {")
+				e("                    let filled = (%d.0_f32 * v) as usize;", op.pw)
+				e("                    if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
+				e("                }")
 			else
-				e("            if let Ok(v) = val.parse::<f32>() {")
+				e("                if let Ok(v) = val.parse::<f32>() {")
 				if op.adjust then
 					local min = op.adjust[2]
 					local max = op.adjust[3]
-					e("                let v = ((v - %g.0) / (%g.0 - %g.0)).clamp(0.0, 1.0);", min, max, min)
+					e("                    let v = ((v - %g.0) / (%g.0 - %g.0)).clamp(0.0, 1.0);", min, max, min)
 				else
-					e("                let v = v.clamp(0.0, 1.0);")
+					e("                    let v = v.clamp(0.0, 1.0);")
 				end
 				local fg
 				if op.overload then
@@ -2162,156 +2164,145 @@ for _, name in ipairs(menu_names) do
 				else
 					fg = rgb_lit(op.fg)
 				end
-				e("                let fg = %s;", fg)
-				e("                let filled = (%d.0_f32 * v) as usize;", op.pw)
+				e("                    let fg = %s;", fg)
+				e("                    let filled = (%d.0_f32 * v) as usize;", op.pw)
 				if op.overload then
-					e("                PROG_%d_PREV.store(filled, Ordering::Relaxed);", op.prog_idx)
-					-- Always full redraw to handle color changes
-					e("                if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
-					e("                if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
+					e("                    self.prog_%d_prev = filled;", op.prog_idx)
+					e("                    if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
+					e("                    if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
 				else
-					e("                let prev = PROG_%d_PREV.swap(filled, Ordering::Relaxed);", op.prog_idx)
-					e("                if filled != prev {")
-					e("                    if prev == usize::MAX {")
-					e("                        if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
-					e("                        if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
-					e("                    } else if filled > prev {")
-					e("                        backend.fill_rect(%s, %d, filled - prev, %d, fg);", x_prev, op.py, op.ph)
-					e("                    } else {")
-					e("                        backend.fill_rect(%s, %d, prev - filled, %d, %s);", x_filled, op.py, op.ph, rgb_lit(op.bg))
+					e("                    let prev = self.prog_%d_prev; self.prog_%d_prev = filled;", op.prog_idx, op.prog_idx)
+					e("                    if filled != prev {")
+					e("                        if prev == usize::MAX {")
+					e("                            if filled > 0 { backend.fill_rect(%d, %d, filled, %d, fg); }", op.px, op.py, op.ph)
+					e("                            if filled < %d { backend.fill_rect(%s, %d, %d - filled, %d, %s); }", op.pw, x_filled, op.py, op.pw, op.ph, rgb_lit(op.bg))
+					e("                        } else if filled > prev {")
+					e("                            backend.fill_rect(%s, %d, filled - prev, %d, fg);", x_prev, op.py, op.ph)
+					e("                        } else {")
+					e("                            backend.fill_rect(%s, %d, prev - filled, %d, %s);", x_filled, op.py, op.ph, rgb_lit(op.bg))
+					e("                        }")
 					e("                    }")
-					e("                }")
 				end
-				e("            }")
+				e("                }")
 			end
-			e("        }")
+			e("            }")
 		end
-		e("    }")
+		e("        }")
 	end
 
 	-- Pointer slider rendering
 	local slider_ops = {}
-	for _, op in ipairs(menu_ops[name]) do
+	for _, op in ipairs(ops) do
 		if op.kind == "slider" then slider_ops[#slider_ops+1] = op end
 	end
 	if #slider_ops > 0 then
-		e("    for &(name, val) in changes {")
+		e("        for &(name, val) in changes {")
 		for _, op in ipairs(slider_ops) do
-			local tri_h = math.floor(op.sh * op.pointer_weight)  -- triangle size based on pointer_weight
-			local ribbon_h = op.sh - tri_h        -- ribbon takes remaining space
-			local tri_w = tri_h * 2 + 1           -- triangle width based on height
-			local ribbon_y = op.sy + tri_h        -- ribbon below triangle
+			local tri_h = math.floor(op.sh * op.pointer_weight)
+			local ribbon_h = op.sh - tri_h
+			local tri_w = tri_h * 2 + 1
+			local ribbon_y = op.sy + tri_h
 			local bg = rgb_lit(op.bg)
-			e("        if name == %q {", op.lbl)
-			e("            let v = val.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0);")
-			e("            let ribbon = SLIDER_%d_RIBBON;", op.slider_idx)
-			e("            let pos = (%d.0_f32 * v) as usize;", op.sw - 1)
-			e("            let prev = SLIDER_%d_PREV.swap(pos, Ordering::Relaxed);", op.slider_idx)
-			-- Draw ribbon (only on first draw)
-			e("            if prev == usize::MAX {")
-			e("                for xi in 0..%d_usize {", op.sw)
-			e("                    let c = ribbon[xi.min(ribbon.len() - 1)];")
-			e("                    backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, ribbon_y, ribbon_h)
+			e("            if name == %q {", op.lbl)
+			e("                let v = val.parse::<f32>().unwrap_or(0.0).clamp(0.0, 1.0);")
+			e("                let ribbon = SLIDER_%d_RIBBON;", op.slider_idx)
+			e("                let pos = (%d.0_f32 * v) as usize;", op.sw - 1)
+			e("                let prev = self.slider_%d_prev; self.slider_%d_prev = pos;", op.slider_idx, op.slider_idx)
+			e("                if prev == usize::MAX {")
+			e("                    for xi in 0..%d_usize {", op.sw)
+			e("                        let c = ribbon[xi.min(ribbon.len() - 1)];")
+			e("                        backend.fill_rect(%d + xi, %d, 1, %d, c);", op.sx, ribbon_y, ribbon_h)
+			e("                    }")
 			e("                }")
-			e("            }")
-			-- Erase old triangle (clear with bg)
-			e("            if prev != usize::MAX && prev != pos {")
-			e("                let old_left = prev.saturating_sub(%d);", (tri_w - 1) / 2)
-			e("                let old_right = (prev + %d + 1).min(%d);", (tri_w - 1) / 2, op.sw)
-			e("                backend.fill_rect(%d + old_left, %d, old_right - old_left, %d, %s);",
+			e("                if prev != usize::MAX && prev != pos {")
+			e("                    let old_left = prev.saturating_sub(%d);", (tri_w - 1) / 2)
+			e("                    let old_right = (prev + %d + 1).min(%d);", (tri_w - 1) / 2, op.sw)
+			e("                    backend.fill_rect(%d + old_left, %d, old_right - old_left, %d, %s);",
 				op.sx, op.sy, tri_h, bg)
-			e("            }")
-			-- Draw new triangle (white downward-pointing, vertex at bottom touching ribbon)
+			e("                }")
 			do
 				local fg = rgb_lit(op.fg)
 				for row = 0, tri_h - 1 do
-					local half = tri_h - 1 - row  -- narrowing from top to bottom
+					local half = tri_h - 1 - row
 					if half > 0 then
-						e("            { let cx = pos as isize; let l = (cx - %d).max(0) as usize; let r = (cx + %d + 1).min(%d) as usize; if r > l { backend.fill_rect(%d + l, %d, r - l, 1, %s); } }",
+						e("                { let cx = pos as isize; let l = (cx - %d).max(0) as usize; let r = (cx + %d + 1).min(%d) as usize; if r > l { backend.fill_rect(%d + l, %d, r - l, 1, %s); } }",
 							half, half, op.sw, op.sx, op.sy + row, fg)
 					else
-						e("            { backend.fill_rect(%d + pos, %d, 1, 1, %s); }",
+						e("                { backend.fill_rect(%d + pos, %d, 1, 1, %s); }",
 							op.sx, op.sy + row, fg)
 					end
 				end
 			end
-			e("        }")
+			e("            }")
 		end
-		e("    }")
+		e("        }")
 	end
 
-	-- Chart widget updates: push new data, then redraw if dirty or new data
+	-- Chart widget updates
 	local menu_charts = {}
 	for _, op in ipairs(ops) do
 		if op.kind == "chart" then menu_charts[#menu_charts+1] = op end
 	end
 	if #menu_charts > 0 then
-		-- Push new data from changes
-		e("    for &(name, val) in changes {")
+		e("        for &(name, val) in changes {")
 		for _, op in ipairs(menu_charts) do
-			e("        if name == %q {", op.lbl)
-			e("            if let Ok(v) = val.parse::<f64>() {")
-			e("                let mut data = CHART_%d_DATA.lock().unwrap();", op.chart_idx)
-			e("                data.push(v);")
-			e("                let max_pts = %d_usize;", op.cw)
-			e("                if data.len() > max_pts { let excess = data.len() - max_pts; data.drain(..excess); }")
-			e("                CHART_%d_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);", op.chart_idx)
+			e("            if name == %q {", op.lbl)
+			e("                if let Ok(v) = val.parse::<f64>() {")
+			e("                    self.chart_%d_data.push(v);", op.chart_idx)
+			e("                    let max_pts = %d_usize;", op.cw)
+			e("                    if self.chart_%d_data.len() > max_pts { let excess = self.chart_%d_data.len() - max_pts; self.chart_%d_data.drain(..excess); }", op.chart_idx, op.chart_idx, op.chart_idx)
+			e("                    self.chart_%d_dirty = true;", op.chart_idx)
+			e("                }")
 			e("            }")
-			e("        }")
 		end
-		e("    }")
-		-- Redraw dirty charts from existing data
+		e("        }")
 		for _, op in ipairs(menu_charts) do
 			local fg = rgb_lit(op.fg)
 			local bg = rgb_lit(op.bg)
-			e("    if CHART_%d_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed) {", op.chart_idx)
-			e("        let data = CHART_%d_DATA.lock().unwrap();", op.chart_idx)
-			e("        let bg = %s;", bg)
-			e("        let fg = %s;", fg)
-			e("        backend.fill_rect(%d, %d, %d, %d, bg);", op.cx, op.cy, op.cw, op.ch)
-			e("        let visible = data.len().min(%d);", op.cw)
-			e("        if visible > 0 {")
-			e("            let start = data.len() - visible;")
-			e("            let mut min_v = f64::MAX;")
-			e("            let mut max_v = f64::MIN;")
-			e("            for i in start..data.len() { min_v = min_v.min(data[i]); max_v = max_v.max(data[i]); }")
-			e("            let range = max_v - min_v;")
-			e("            if range < 1e-15 { min_v -= 1.0; max_v += 1.0; }")
-			e("            else { min_v -= range * 0.1; max_v += range * 0.1; }")
-			e("            let draw_h = %d_usize;", op.ch)
-			e("            let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
-			e("            for i in 0..visible {")
-			e("                let v = data[start + i];")
-			e("                let norm = ((v - min_v) * scale) as usize;")
-			e("                let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
-			e("                let bar_h = (%d + draw_h - py).max(1);", op.cy)
-			e("                let px = %d + %d - visible + i;", op.cx, op.cw)
-			e("                backend.fill_rect(px, py, 1, bar_h, fg);")
+			e("        if self.chart_%d_dirty { self.chart_%d_dirty = false;", op.chart_idx, op.chart_idx)
+			e("            let data = &self.chart_%d_data;", op.chart_idx)
+			e("            let bg = %s;", bg)
+			e("            let fg = %s;", fg)
+			e("            backend.fill_rect(%d, %d, %d, %d, bg);", op.cx, op.cy, op.cw, op.ch)
+			e("            let visible = data.len().min(%d);", op.cw)
+			e("            if visible > 0 {")
+			e("                let start = data.len() - visible;")
+			e("                let mut min_v = f64::MAX;")
+			e("                let mut max_v = f64::MIN;")
+			e("                for &v in &data[start..] { min_v = min_v.min(v); max_v = max_v.max(v); }")
+			e("                let range = max_v - min_v;")
+			e("                if range < 1e-15 { min_v -= 1.0; max_v += 1.0; }")
+			e("                else { min_v -= range * 0.1; max_v += range * 0.1; }")
+			e("                let draw_h = %d_usize;", op.ch)
+			e("                let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
+			e("                for i in 0..visible {")
+			e("                    let v = data[start + i];")
+			e("                    let norm = ((v - min_v) * scale) as usize;")
+			e("                    let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
+			e("                    let bar_h = (%d + draw_h - py).max(1);", op.cy)
+			e("                    let px = %d + %d - visible + i;", op.cx, op.cw)
+			e("                    backend.fill_rect(px, py, 1, bar_h, fg);")
+			e("                }")
 			e("            }")
 			e("        }")
-			e("    }")
 		end
 	end
 
-	if #fops > 0 then
-		e("    {")
-		e("        let focused = *FOCUSED.lock().unwrap();")
-		e("        let mut last = LAST_DRAWN_FOCUS.lock().unwrap();")
-		e("        if *last != focused {")
-		e("            let prev = *last;")
-		e("            *last = focused;")
-		e("            drop(last);")
-		e("            draw_focus_%s(backend, prev, focused);", name:lower())
+	-- Focus redraw
+	if has_focus then
+		e("        if self.last_drawn_focus != self.focused {")
+		e("            let prev = self.last_drawn_focus;")
+		e("            let focused = self.focused;")
+		e("            self.last_drawn_focus = focused;")
+		e("            self.draw_focus(backend, prev, focused);")
 		-- Reset dynamic label tracking for elements that overlap with changed focus
-		-- Only reset labels that are inside a focusable area that changed
 		for _, op in ipairs(dyn_ops) do
 			for fi, fop in ipairs(fops) do
 				local fidx = fop.focus_index
-				-- Check if dynamic label overlaps with this focusable area
 				if op.x >= fop.x and op.x < fop.x + fop.w
 				   and op.text_y >= fop.y and op.text_y < fop.y + fop.h then
 					e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
-					e("                %s.store(usize::MAX, Ordering::Relaxed);", ("DYN_%d_END"):format(op.dyn_idx))
+					e("                self.dyn_%d_end = usize::MAX;", op.dyn_idx)
 					e("            }")
 					break
 				end
@@ -2325,7 +2316,7 @@ for _, name in ipairs(menu_names) do
 					if op.px >= fop.x and op.px < fop.x + fop.w
 					   and op.py >= fop.y and op.py < fop.y + fop.h then
 						e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
-						e("                PROG_%d_PREV.store(usize::MAX, Ordering::Relaxed);", op.prog_idx)
+						e("                self.prog_%d_prev = usize::MAX;", op.prog_idx)
 						e("            }")
 						break
 					end
@@ -2333,48 +2324,45 @@ for _, name in ipairs(menu_names) do
 			end
 		end
 		e("        }")
-		e("    }")
 	end
 
 	-- Auto-activate set_stay/set_param buttons BEFORE active state redraw
 	if has_auto_active then
-		e("    for &(name, val) in changes {")
+		e("        for &(name, val) in changes {")
 		for _, param in ipairs(aa_params) do
 			local group = aa[param]
-			e("        if name == %q {", param)
-			e("            let mut set = ACTIVE.lock().unwrap();")
+			e("            if name == %q {", param)
 			for _, entry in ipairs(group) do
-				e("            set.remove(&%d);", entry.idx)
+				e("                self.active.remove(&%d);", entry.idx)
 			end
-			e("            match val {")
+			e("                match val {")
 			for _, entry in ipairs(group) do
-				e("                %q => { set.insert(%d); }", entry.value, entry.idx)
-				-- Also match formatted enum name so auto-active works after format_values
+				e("                    %q => { self.active.insert(%d); }", entry.value, entry.idx)
 				local info = param_info[param]
 				if info and info.opts then
 					local idx = tonumber(entry.value)
 					if idx and info.opts[idx + 1] and info.opts[idx + 1] ~= entry.value then
-						e("                %q => { set.insert(%d); }", info.opts[idx + 1], entry.idx)
+						e("                    %q => { self.active.insert(%d); }", info.opts[idx + 1], entry.idx)
 					end
 				end
 			end
-			e("                _ => {}")
+			e("                    _ => {}")
+			e("                }")
 			e("            }")
-			e("        }")
 		end
-		e("    }")
+		e("        }")
 	end
 
 	-- Build lookups: container_active idx -> lists of static/dynamic children
 	local container_static_children = {}
 	local container_dyn_children = {}
-	for _, op in ipairs(menu_ops[name]) do
+	for _, op in ipairs(ops) do
 		if op.kind == "container_active" and op.active_idx then
 			container_static_children[op.active_idx] = {}
 			container_dyn_children[op.active_idx] = {}
 		end
 	end
-	for _, op in ipairs(menu_ops[name]) do
+	for _, op in ipairs(ops) do
 		if op.active_idx then
 			if op.kind == "static" then
 				local t = container_static_children[op.active_idx]
@@ -2387,25 +2375,15 @@ for _, name in ipairs(menu_names) do
 	end
 
 	-- Active state redraw for static nodes
-	local menu_active_ops = {}
-	for _, op in ipairs(all_active_ops) do
-		if op.active_menu == name then
-			menu_active_ops[#menu_active_ops+1] = op
-		end
-	end
-	if #menu_active_ops > 0 then
-		e("    {")
-		e("        let active = ACTIVE.lock().unwrap().clone();")
-		e("        let mut last = LAST_DRAWN_ACTIVE.lock().unwrap();")
-		e("        if active != *last {")
-		e("            *last = active.clone();")
-		e("            drop(last);")
-		for _, op in ipairs(menu_active_ops) do
+	if #m_active_ops > 0 then
+		e("        if self.active != self.last_drawn_active {")
+		e("            self.last_drawn_active = self.active.clone();")
+		for _, op in ipairs(m_active_ops) do
 			local bg = op.atlas and rgb_lit(op.atlas.bg) or rgb_lit(op.bg)
 			local act = op.active_style
 			local act_bg = act.bg and rgb_lit(act.bg) or bg
 			local act_border = act.border or op.normal_border
-			e("            if active.contains(&%d) {", op.active_idx)
+			e("            if self.active.contains(&%d) {", op.active_idx)
 			e("                backend.fill_rect(%d, %d, %d, %d, %s);", op.x, op.y, op.w, op.h, act_bg)
 			if op.lines then
 				local act_atlas_fn = op.active_atlas and op.active_atlas.fn_name or op.atlas.fn_name
@@ -2415,7 +2393,6 @@ for _, name in ipairs(menu_names) do
 						op.text_x, op.inner_w, ly, line)
 				end
 			end
-			-- Re-blit static children of container_active with active atlas
 			local children = container_static_children[op.active_idx]
 			if children then
 				for _, ch in ipairs(children) do
@@ -2427,16 +2404,14 @@ for _, name in ipairs(menu_names) do
 					end
 				end
 			end
-			-- Reset dynamic children so they redraw with correct bg
 			local dyn_ch = container_dyn_children[op.active_idx]
 			if dyn_ch then
 				for _, dc in ipairs(dyn_ch) do
-					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
+					e("                self.dyn_%d_end = usize::MAX;", dc.dyn_idx)
 				end
 			end
-			-- Reset leaf dynamic op itself so its text redraws after bg fill
 			if op.kind == "dynamic" and op.dyn_idx then
-				e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", op.dyn_idx)
+				e("                self.dyn_%d_end = usize::MAX;", op.dyn_idx)
 			end
 			emit_border("                ", op.x, op.y, op.w, op.h, act_border)
 			e("            } else {")
@@ -2448,7 +2423,6 @@ for _, name in ipairs(menu_names) do
 						op.text_x, op.inner_w, ly, line)
 				end
 			end
-			-- Re-blit static children of container_active with normal atlas
 			if children then
 				for _, ch in ipairs(children) do
 					for i, line in ipairs(ch.lines) do
@@ -2458,28 +2432,362 @@ for _, name in ipairs(menu_names) do
 					end
 				end
 			end
-			-- Reset dynamic children so they redraw with correct bg
 			if dyn_ch then
 				for _, dc in ipairs(dyn_ch) do
-					e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", dc.dyn_idx)
+					e("                self.dyn_%d_end = usize::MAX;", dc.dyn_idx)
 				end
 			end
-			-- Reset leaf dynamic op itself so its text redraws after bg fill
 			if op.kind == "dynamic" and op.dyn_idx then
-				e("                DYN_%d_END.store(usize::MAX, Ordering::Relaxed);", op.dyn_idx)
+				e("                self.dyn_%d_end = usize::MAX;", op.dyn_idx)
 			end
 			emit_border("                ", op.x, op.y, op.w, op.h, op.normal_border)
 			e("            }")
 		end
 		e("        }")
-		e("    }")
 	end
 
+	e("    }")  -- end update_params
+	e("")
+	e("    } // impl State")
+	e("} // mod menu_%s", name:lower())
+	e("")
+end
+
+-------------------------------------------------------------------------------
+-- 6d. Router struct
+-------------------------------------------------------------------------------
+
+e("pub struct Router {")
+e("    current: Option<Menu>,")
+for _, name in ipairs(menu_names) do
+	e("    %s: menu_%s::State,", name:lower(), name:lower())
+end
+e("    press_x: usize,")
+e("    press_right: usize,")
+e("}")
+e("")
+
+-- Helper: emit match/if-let on self.current for a filtered subset of menus.
+-- arms is a list of {name=..., ...} entries. emit_arm(arm, indent) emits the body.
+-- When there is exactly one arm, emits `if let` instead of `match`.
+local function emit_current_dispatch(self_ref, arms, emit_arm, indent)
+	indent = indent or "    "
+	if #arms == 0 then return end
+	if #arms == 1 then
+		local arm = arms[1]
+		e("%sif let Some(Menu::%s) = %s {", indent, arm.name, self_ref)
+		emit_arm(arm, indent .. "    ")
+		e("%s}", indent)
+	else
+		e("%smatch %s {", indent, self_ref)
+		for _, arm in ipairs(arms) do
+			e("%s    Some(Menu::%s) => {", indent, arm.name)
+			emit_arm(arm, indent .. "        ")
+			e("%s    }", indent)
+		end
+		e("%s    _ => {}", indent)
+		e("%s}", indent)
+	end
+end
+
+e("impl Router {")
+
+-- Router::new()
+e("pub fn new() -> Self {")
+e("    Router {")
+e("        current: None,")
+for _, name in ipairs(menu_names) do
+	e("        %s: menu_%s::State::new(),", name:lower(), name:lower())
+end
+e("        press_x: 0,")
+e("        press_right: 0,")
+e("    }")
+e("}")
+e("")
+
+-- Router::update_events()
+e("pub fn update_events<C: Callbacks>(&mut self, events: &[InputEvent], state: &mut C) {")
+e("    for ev in events {")
+e("        if let InputEvent::Quit = ev { state.quit(); return; }")
+e("    }")
+e("    let mut press = (self.press_x, self.press_right);")
+e("    match self.current {")
+for _, name in ipairs(menu_names) do
+	e("        Some(Menu::%s) => self.%s.update_events(events, state, &mut press),", name, name:lower())
+end
+e("        None => {}")
+e("    }")
+e("    self.press_x = press.0;")
+e("    self.press_right = press.1;")
+e("}")
+e("")
+
+-- Router::update_menu()
+e("pub fn update_menu(&mut self, backend: &mut dyn Backend<Pixel>, menu: Menu) {")
+e("    if self.current != Some(menu) {")
+e("        self.current = Some(menu);")
+e("        match menu {")
+for _, name in ipairs(menu_names) do
+	e("            Menu::%s => { self.%s.reset(); self.%s.draw(backend); }", name, name:lower(), name:lower())
+end
+e("        }")
+e("    }")
+e("}")
+e("")
+
+-- Router::force_redraw()
+e("pub fn force_redraw(&mut self) {")
+e("    self.current = None;")
+e("}")
+e("")
+
+-- Router::update_params()
+e("pub fn update_params(&mut self, backend: &mut dyn Backend<Pixel>, changes: &[(&str, &str)]) {")
+e("    match self.current {")
+for _, name in ipairs(menu_names) do
+	e("        Some(Menu::%s) => self.%s.update_params(backend, changes),", name, name:lower())
+end
+e("        None => {}")
+e("    }")
+e("    backend.flush();")
+e("}")
+e("")
+
+-- Router::last_press()
+e("pub fn last_press(&self) -> (usize, usize) { (self.press_x, self.press_right) }")
+e("")
+
+-- Router::set_active()
+do
+	local active_menus = {}
+	for _, name in ipairs(menu_names) do
+		if #menu_active_ops[name] > 0 then
+			active_menus[#active_menus+1] = { name = name }
+		end
+	end
+	if #active_menus > 0 then
+		e("pub fn set_active(&mut self, id: &str, active: bool) {")
+		emit_current_dispatch("self.current", active_menus, function(arm, indent)
+			e("%slet idx = match id {", indent)
+			for _, op in ipairs(menu_active_ops[arm.name]) do
+				e("%s    %q => Some(%d),", indent, op.active_id, op.active_idx)
+			end
+			e("%s    _ => None,", indent)
+			e("%s};", indent)
+			e("%sif let Some(i) = idx {", indent)
+			e("%s    if active { self.%s.active.insert(i); } else { self.%s.active.remove(&i); }", indent, arm.name:lower(), arm.name:lower())
+			e("%s}", indent)
+		end)
+		e("}")
+		e("")
+		e("pub fn clear_all_active(&mut self) {")
+		emit_current_dispatch("self.current", active_menus, function(arm, indent)
+			e("%sself.%s.active.clear();", indent, arm.name:lower())
+		end)
+		e("}")
+		e("")
+	end
+end
+
+-- Router::init_auto_active()
+do
+	local aa_menus = {}
+	for _, name in ipairs(menu_names) do
+		if next(auto_active[name]) then
+			aa_menus[#aa_menus+1] = { name = name }
+		end
+	end
+	if #aa_menus > 0 then
+		e("pub fn init_auto_active(&mut self, values: &[(&str, &str)]) {")
+		emit_current_dispatch("self.current", aa_menus, function(arm, indent)
+			local aa = auto_active[arm.name]
+			local aa_params = {}
+			for param in pairs(aa) do aa_params[#aa_params+1] = param end
+			table.sort(aa_params)
+			e("%sfor &(name, val) in values {", indent)
+			for _, param in ipairs(aa_params) do
+				local group = aa[param]
+				e("%s    if name == %q {", indent, param)
+				for _, entry in ipairs(group) do
+					e("%s        self.%s.active.remove(&%d);", indent, arm.name:lower(), entry.idx)
+				end
+				e("%s        match val {", indent)
+				for _, entry in ipairs(group) do
+					e("%s            %q => { self.%s.active.insert(%d); }", indent, entry.value, arm.name:lower(), entry.idx)
+					local info = param_info[param]
+					if info and info.opts then
+						local idx = tonumber(entry.value)
+						if idx and info.opts[idx + 1] and info.opts[idx + 1] ~= entry.value then
+							e("%s            %q => { self.%s.active.insert(%d); }", indent, info.opts[idx + 1], arm.name:lower(), entry.idx)
+						end
+					end
+				end
+				e("%s            _ => {}", indent)
+				e("%s        }", indent)
+				e("%s    }", indent)
+			end
+			e("%s}", indent)
+		end)
+		e("}")
+		e("")
+	end
+end
+
+-- Router::set_focused()
+do
+	local entries = {}
+	for _, name in ipairs(menu_names) do
+		local fops = get_focusable_ops(menu_ops[name])
+		for fi, op in ipairs(fops) do
+			if op.lbl then
+				entries[#entries+1] = { menu = name, idx = op.focus_index, lbl = op.lbl }
+			end
+		end
+	end
+	e("pub fn set_focused(&mut self, label: &str) {")
+	if #entries > 0 then
+		-- Group by menu
+		local by_menu = {}
+		local focus_menus = {}
+		for _, ent in ipairs(entries) do
+			if not by_menu[ent.menu] then
+				by_menu[ent.menu] = {}
+				focus_menus[#focus_menus+1] = { name = ent.menu }
+			end
+			by_menu[ent.menu][#by_menu[ent.menu]+1] = ent
+		end
+		emit_current_dispatch("self.current", focus_menus, function(arm, indent)
+			e("%sself.%s.focused = match label {", indent, arm.name:lower())
+			for _, ent in ipairs(by_menu[arm.name]) do
+				e("%s    %q => Some(%d),", indent, ent.lbl, ent.idx)
+			end
+			e("%s    _ => None,", indent)
+			e("%s};", indent)
+		end)
+	end
+	e("}")
+	e("")
+	-- clear_focused, get_focused, set_focused_raw always have all menus as arms
+	-- (every menu has a focused field) so no single-pattern issue
+	e("pub fn clear_focused(&mut self) {")
+	e("    match self.current {")
+	for _, name in ipairs(menu_names) do
+		e("        Some(Menu::%s) => self.%s.focused = None,", name, name:lower())
+	end
+	e("        _ => {}")
+	e("    }")
+	e("}")
+	e("")
+	e("pub fn get_focused(&self) -> Option<usize> {")
+	e("    match self.current {")
+	for _, name in ipairs(menu_names) do
+		e("        Some(Menu::%s) => self.%s.focused,", name, name:lower())
+	end
+	e("        _ => None,")
+	e("    }")
+	e("}")
+	e("")
+	e("pub fn set_focused_raw(&mut self, idx: Option<usize>) {")
+	e("    match self.current {")
+	for _, name in ipairs(menu_names) do
+		e("        Some(Menu::%s) => self.%s.focused = idx,", name, name:lower())
+	end
+	e("        _ => {}")
+	e("    }")
 	e("}")
 	e("")
 end
 
--- emit FMT_PARAMS: params that have per-label fmt (skip in format_values)
+-- Router::focused_adjust()
+do
+	local adjustables = {}
+	for _, name in ipairs(menu_names) do
+		local fops = get_focusable_ops(menu_ops[name])
+		for fi, op in ipairs(fops) do
+			if op.adjust then
+				adjustables[#adjustables+1] = {
+					menu = name,
+					focus_idx = op.focus_index,
+					param = op.adjust[1],
+					min = op.adjust[2],
+					max = op.adjust[3],
+				}
+			end
+		end
+	end
+	e("pub fn focused_adjust(&self) -> Option<(&'static str, f64, f64)> {")
+	if #adjustables > 0 then
+		e("    match self.current {")
+		-- Group by menu
+		local by_menu = {}
+		for _, a in ipairs(adjustables) do
+			if not by_menu[a.menu] then by_menu[a.menu] = {} end
+			by_menu[a.menu][#by_menu[a.menu]+1] = a
+		end
+		for _, name in ipairs(menu_names) do
+			if by_menu[name] then
+				e("        Some(Menu::%s) => match self.%s.focused {", name, name:lower())
+				for _, a in ipairs(by_menu[name]) do
+					e("            Some(%d) => Some((%q, %g.0, %g.0)),", a.focus_idx, a.param, a.min, a.max)
+				end
+				e("            _ => None,")
+				e("        },")
+			end
+		end
+		e("        _ => None,")
+		e("    }")
+	else
+		e("    None")
+	end
+	e("}")
+	e("")
+end
+
+-- Router::label_bounds()
+do
+	local entries = {}
+	for _, name in ipairs(menu_names) do
+		for _, op in ipairs(menu_ops[name]) do
+			if op.kind == "dynamic" and op.lbl then
+				entries[#entries+1] = { menu = name, lbl = op.lbl, x = op.x, y = op.y, w = op.w, h = op.h }
+			end
+		end
+	end
+	e("pub fn label_bounds(&self, label: &str) -> Option<(usize, usize, usize, usize)> {")
+	if #entries > 0 then
+		e("    match self.current {")
+		local by_menu = {}
+		for _, ent in ipairs(entries) do
+			if not by_menu[ent.menu] then by_menu[ent.menu] = {} end
+			by_menu[ent.menu][#by_menu[ent.menu]+1] = ent
+		end
+		for _, name in ipairs(menu_names) do
+			if by_menu[name] then
+				e("        Some(Menu::%s) => match label {", name)
+				for _, ent in ipairs(by_menu[name]) do
+					e("            %q => Some((%d, %d, %d, %d)),", ent.lbl, ent.x, ent.y, ent.w, ent.h)
+				end
+				e("            _ => None,")
+				e("        },")
+			end
+		end
+		e("        _ => None,")
+		e("    }")
+	else
+		e("    None")
+	end
+	e("}")
+	e("")
+end
+
+e("} // impl Router")
+e("")
+
+-------------------------------------------------------------------------------
+-- 6e. Free functions (stateless)
+-------------------------------------------------------------------------------
+
+-- emit FMT_PARAMS
 do
 	local fmt_params = {}
 	for _, name in ipairs(menu_names) do
@@ -2489,7 +2797,6 @@ do
 			end
 		end
 	end
-	-- Also skip params that have built-in formatting from param_info
 	for name, _ in pairs(param_info) do
 		fmt_params[name] = true
 	end
@@ -2503,10 +2810,8 @@ do
 	e("")
 end
 
--- emit format_param(): built-in enum and numeric formatting from params.txt metadata
+-- emit format_param()
 do
-	-- Collect params that have formatting metadata and are used as dynamic labels
-	-- or as sources for derived labels
 	local used_params = {}
 	for _, name in ipairs(menu_names) do
 		for _, op in ipairs(menu_ops[name]) do
@@ -2526,7 +2831,6 @@ do
 	for k in pairs(used_params) do sorted[#sorted+1] = k end
 	table.sort(sorted)
 
-	-- Unicode minus sign
 	local MINUS = "\u{2212}"
 
 	e("/// Format a parameter value using metadata from params.txt.")
@@ -2540,7 +2844,6 @@ do
 		for _, pname in ipairs(sorted) do
 		local info = param_info[pname]
 		if info.opts then
-			-- Enum: index → option name
 			e("        %q => {", pname)
 			e("            let i = val.parse::<f64>().ok()? as usize;")
 			e("            Some(match i {")
@@ -2551,14 +2854,12 @@ do
 			e("            })")
 			e("        }")
 		elseif info.prec then
-			-- Numeric: precision + optional unit + digit grouping
 			local prec = info.prec
 			local unit = info.unit
 			local is_angle = info.is_angle
 			e("        %q => {", pname)
 			e("            let n = val.parse::<f64>().ok()?;")
 			if is_angle then
-				-- Pad angles to 3 integer digits
 				e("            let raw = if n < 0.0 {")
 				e("                format!(\"-{:0>width$.prec$}\", n.abs(), width = %d, prec = %d)", prec + 4, prec)
 				e("            } else {")
@@ -2596,178 +2897,6 @@ do
 		e("}")
 		e("")
 	end
-end
-
--- emit focused_adjust(): returns (param_name, min, max) for adjustable focused element
-do
-	local adjustables = {}
-	for _, name in ipairs(menu_names) do
-		local fops = get_focusable_ops(menu_ops[name])
-		for fi, op in ipairs(fops) do
-			if op.adjust then
-				adjustables[#adjustables+1] = {
-					menu = name,
-					focus_idx = op.focus_index,
-					param = op.adjust[1],
-					min = op.adjust[2],
-					max = op.adjust[3],
-				}
-			end
-		end
-	end
-	e("pub fn focused_adjust() -> Option<(&'static str, f64, f64)> {")
-	if #adjustables > 0 then
-		e("    let menu = CURRENT_MENU.lock().unwrap();")
-		e("    let focused = *FOCUSED.lock().unwrap();")
-		e("    match (*menu, focused) {")
-		for _, a in ipairs(adjustables) do
-			e("        (Some(Menu::%s), Some(%d)) => Some((%q, %g.0, %g.0)),",
-				a.menu, a.focus_idx, a.param, a.min, a.max)
-		end
-		e("        _ => None,")
-		e("    }")
-	else
-		e("    None")
-	end
-	e("}")
-	e("")
-end
-
--- emit set_focused(): set focus by label name for the current menu
-do
-	-- Collect all focusable ops across menus with their labels
-	local entries = {}
-	for _, name in ipairs(menu_names) do
-		local fops = get_focusable_ops(menu_ops[name])
-		for fi, op in ipairs(fops) do
-			if op.lbl then
-				entries[#entries+1] = { menu = name, idx = op.focus_index, lbl = op.lbl }
-			end
-		end
-	end
-	e("pub fn set_focused(label: &str) {")
-	if #entries > 0 then
-		e("    let menu = *CURRENT_MENU.lock().unwrap();")
-		e("    let idx = match (menu, label) {")
-		for _, ent in ipairs(entries) do
-			e("        (Some(Menu::%s), %q) => Some(%d),", ent.menu, ent.lbl, ent.idx)
-		end
-		e("        _ => None,")
-		e("    };")
-		e("    *FOCUSED.lock().unwrap() = idx;")
-	end
-	e("}")
-	e("")
-	e("pub fn clear_focused() {")
-	e("    *FOCUSED.lock().unwrap() = None;")
-	e("}")
-	e("")
-	e("pub fn get_focused() -> Option<usize> {")
-	e("    *FOCUSED.lock().unwrap()")
-	e("}")
-	e("")
-	e("pub fn set_focused_raw(idx: Option<usize>) {")
-	e("    *FOCUSED.lock().unwrap() = idx;")
-	e("}")
-	e("")
-end
-
--- emit set_active / clear_all_active
-if #all_active_ops > 0 then
-	e("pub fn set_active(id: &str, active: bool) {")
-	e("    let menu = *CURRENT_MENU.lock().unwrap();")
-	e("    let idx = match (menu, id) {")
-	for _, op in ipairs(all_active_ops) do
-		e("        (Some(Menu::%s), %q) => Some(%d),", op.active_menu, op.active_id, op.active_idx)
-	end
-	e("        _ => None,")
-	e("    };")
-	e("    if let Some(i) = idx {")
-	e("        let mut set = ACTIVE.lock().unwrap();")
-	e("        if active { set.insert(i); } else { set.remove(&i); }")
-	e("    }")
-	e("}")
-	e("")
-	e("pub fn clear_all_active() {")
-	e("    ACTIVE.lock().unwrap().clear();")
-	e("}")
-	e("")
-end
-
--- emit init_auto_active(): set active state for auto-active buttons based on current values
-do
-	local has_any = false
-	for _, name in ipairs(menu_names) do
-		if next(auto_active[name]) then has_any = true; break end
-	end
-	if has_any then
-		e("pub fn init_auto_active(values: &[(&str, &str)]) {")
-		e("    let menu = *CURRENT_MENU.lock().unwrap();")
-		e("    let mut set = ACTIVE.lock().unwrap();")
-		for _, name in ipairs(menu_names) do
-			local aa = auto_active[name]
-			local aa_params = {}
-			for param in pairs(aa) do aa_params[#aa_params+1] = param end
-			table.sort(aa_params)
-			if #aa_params > 0 then
-				e("    if menu == Some(Menu::%s) {", name)
-				e("        for &(name, val) in values {")
-				for _, param in ipairs(aa_params) do
-					local group = aa[param]
-					e("            if name == %q {", param)
-					for _, entry in ipairs(group) do
-						e("                set.remove(&%d);", entry.idx)
-					end
-					e("                match val {")
-					for _, entry in ipairs(group) do
-						e("                    %q => { set.insert(%d); }", entry.value, entry.idx)
-						-- Also match formatted enum name
-						local info = param_info[param]
-						if info and info.opts then
-							local idx = tonumber(entry.value)
-							if idx and info.opts[idx + 1] and info.opts[idx + 1] ~= entry.value then
-								e("                    %q => { set.insert(%d); }", info.opts[idx + 1], entry.idx)
-							end
-						end
-					end
-					e("                    _ => {}")
-					e("                }")
-					e("            }")
-				end
-				e("        }")
-				e("    }")
-			end
-		end
-		e("}")
-		e("")
-	end
-end
-
--- emit label_bounds(): return pixel bounding box for a dynamic label in the current menu
-do
-	local entries = {}
-	for _, name in ipairs(menu_names) do
-		for _, op in ipairs(menu_ops[name]) do
-			if op.kind == "dynamic" and op.lbl then
-				entries[#entries+1] = { menu = name, lbl = op.lbl, x = op.x, y = op.y, w = op.w, h = op.h }
-			end
-		end
-	end
-	e("pub fn label_bounds(label: &str) -> Option<(usize, usize, usize, usize)> {")
-	if #entries > 0 then
-		e("    let menu = *CURRENT_MENU.lock().unwrap();")
-		e("    match (menu, label) {")
-		for _, ent in ipairs(entries) do
-			e("        (Some(Menu::%s), %q) => Some((%d, %d, %d, %d)),",
-				ent.menu, ent.lbl, ent.x, ent.y, ent.w, ent.h)
-		end
-		e("        _ => None,")
-		e("    }")
-	else
-		e("    None")
-	end
-	e("}")
-	e("")
 end
 
 io.write(table.concat(out, "\n"))

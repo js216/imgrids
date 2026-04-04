@@ -2,6 +2,7 @@ struct GuiState {
     menu: ui::Menu,
     quit: bool,
     t:    f32,
+    pending_active: Option<usize>,
 }
 
 impl ui::Callbacks for GuiState {
@@ -13,13 +14,9 @@ impl ui::Callbacks for GuiState {
     }
     fn click (&mut self)              { println!("click"); }
     fn action(&mut self, args: &[&str]) {
-        let btns = &["Option A", "Option B", "Option C"];
-        let sel = match args.first().copied() {
-            Some("a") => 0, Some("b") => 1, Some("c") => 2, _ => return,
+        self.pending_active = match args.first().copied() {
+            Some("a") => Some(0), Some("b") => Some(1), Some("c") => Some(2), _ => None,
         };
-        for (i, btn) in btns.iter().enumerate() {
-            ui::set_active(btn, i == sel);
-        }
     }
 }
 
@@ -34,16 +31,22 @@ fn current_values(t: f32) -> Vec<(&'static str, String)> {
 
 fn main() {
     let mut backend = init_backend(ui::SCR_W, ui::SCR_H);
-    let mut state = GuiState { menu: ui::Menu::Hello, quit: false, t: 0.0 };
-    ui::force_redraw();
+    let mut state = GuiState { menu: ui::Menu::Hello, quit: false, t: 0.0, pending_active: None };
+    let mut router = ui::Router::new();
 
     while !state.quit {
         let raw = current_values(state.t);
         let changes: Vec<(&str, &str)> = raw.iter().map(|(n, v)| (*n, v.as_str())).collect();
 
-        ui::update_events(backend.poll_events(), &mut state);
-        ui::update_menu(&mut *backend, state.menu);
-        ui::update_params(&mut *backend, &changes);
+        router.update_events(backend.poll_events(), &mut state);
+        if let Some(sel) = state.pending_active.take() {
+            let btns = &["Option A", "Option B", "Option C"];
+            for (i, btn) in btns.iter().enumerate() {
+                router.set_active(btn, i == sel);
+            }
+        }
+        router.update_menu(&mut *backend, state.menu);
+        router.update_params(&mut *backend, &changes);
 
         state.t += 0.033;
         imgrids::sleep(33);
