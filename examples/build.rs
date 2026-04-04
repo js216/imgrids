@@ -9,19 +9,21 @@ fn main() {
     println!("cargo:rerun-if-changed=../../imgrids/transpiler/symbols.lua");
     println!("cargo:rerun-if-changed=../../target/font_cache");
 
+    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let ui_dir = PathBuf::from(&crate_dir).join("src/ui");
+
     let input = std::fs::File::open("../demo.lua").expect("demo.lua");
-    let out = Command::new("lua")
+    let status = Command::new("lua")
         .arg("imgrids/transpiler/layout.lua")
+        .arg(&ui_dir)
         .stdin(input)
         .current_dir("../../")
-        .output()
+        .status()
         .expect("lua not found");
 
-    if !out.status.success() {
-        panic!("transpiler failed:\n{}", String::from_utf8_lossy(&out.stderr));
+    if !status.success() {
+        panic!("transpiler failed (check stderr above)");
     }
-
-    std::fs::write(out_dir.join("ui.rs"), &out.stdout).expect("write ui.rs");
 
     // Copy .html files (if any) next to the final binary output.
     // OUT_DIR is target/<triple>/release/build/<crate>-<hash>/out/

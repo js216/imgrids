@@ -10,3 +10,6 @@
 # directories
 .claude
 target
+
+# generated UI modules (transpiler output)
+examples/*/src/ui/

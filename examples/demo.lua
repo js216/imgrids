@@ -427,7 +427,7 @@ menus = {
       border = {width = 2, color = colors.white},
       {"[34/34] Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("RightAlign", "Hello"),
+      nav("Grid", "Hello"),
    },
 }
 
@@ -577,7 +577,7 @@ local MINUS_SIGN = utf8char(0x2212)
 menus.RightAlign = {"col",
    {"[32/34] Right Align",                                       size = 40, style = s_title},
    {"Right-aligned numeric values in a\ntwo-column table.", size = 50, style = s_desc},
-   nav("Widgets", "Popup"),
+   nav("Widgets", "Grid"),
    {"row",
       {"col", leaf_style = {align = "right", margin = 4},
          {"+1.000"}, {"+10.000"}, {"+100.000"}, {" 100.000"},
@@ -585,5 +585,29 @@ menus.RightAlign = {"col",
       {"col", leaf_style = {align = "right", margin = 4},
          {MINUS_SIGN .. "1.000"}, {MINUS_SIGN .. "10.000"}, {MINUS_SIGN .. "100.000"}, {" 100.000"},
       },
+   },
+}
+
+local s_cell = {bg = {30, 30, 80}, margin = 4, align = "center",
+                border = {width = 1, color = {100,100,100}}}
+
+menus.Grid = {"col",
+   {"[33/34] Focus Grid",                                        size = 40, style = s_title},
+   {"Click a cell to focus it.\nlabel_bounds + last_press for hit testing.", size = 50, style = s_desc},
+   nav("RightAlign", "Popup"),
+   {"row",
+      {lbl = "cell_1", press = {"select_digit", "1"}, focusable = true, style = s_cell},
+      {lbl = "cell_2", press = {"select_digit", "2"}, focusable = true, style = s_cell},
+      {lbl = "cell_3", press = {"select_digit", "3"}, focusable = true, style = s_cell},
+   },
+   {"row",
+      {lbl = "cell_4", press = {"select_digit", "4"}, focusable = true, style = s_cell},
+      {lbl = "cell_5", press = {"select_digit", "5"}, focusable = true, style = s_cell},
+      {lbl = "cell_6", press = {"select_digit", "6"}, focusable = true, style = s_cell},
+   },
+   {"row",
+      {lbl = "cell_7", press = {"select_digit", "7"}, focusable = true, style = s_cell},
+      {lbl = "cell_8", press = {"select_digit", "8"}, focusable = true, style = s_cell},
+      {lbl = "cell_9", press = {"select_digit", "9"}, focusable = true, style = s_cell},
    },
 }
