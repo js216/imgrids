@@ -308,6 +308,10 @@ local function merge_style(base, node)
 	end
 	if node.pad then
 		s.pad = node.pad
+		s.pad_left = nil
+		s.pad_top = nil
+		s.pad_right = nil
+		s.pad_bottom = nil
 	end
 	if node.pad_left then
 		s.pad_left = node.pad_left
@@ -323,6 +327,10 @@ local function merge_style(base, node)
 	end
 	if node.margin then
 		s.margin = node.margin
+		s.margin_left = nil
+		s.margin_top = nil
+		s.margin_right = nil
+		s.margin_bottom = nil
 	end
 	if node.margin_left then
 		s.margin_left = node.margin_left
