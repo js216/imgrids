@@ -556,8 +556,8 @@ local function hue_ribbon(t)
 end
 
 menus.Widgets = {"col",
-   {"[31/34] Widgets: Progress Bar + Slider + Chart",            size = 40, style = s_title},
-   {"render=\"progress bar\", \"pointer slider\", \"chart\".",   size = 30, style = s_desc},
+   {"[31/34] Widgets: Progress, Slider, Charts",                 size = 40, style = s_title},
+   {"Bar chart (default) vs line chart (anti-aliased).",         size = 30, style = s_desc},
    nav("MidString", "RightAlign"),
    {"row",
       {"col", weight = 0.5,
@@ -567,8 +567,12 @@ menus.Widgets = {"col",
           ribbon = hue_ribbon,
           style = {pad = 4, fg = colors.white}},
       },
-      {lbl = "parameter Three", render = "chart", weight = 0.5,
-       style = {pad = 4, fg = {120, 180, 120}}},
+      {"col", weight = 0.5,
+         {lbl = "parameter Three", render = "chart",
+          style = {pad = 4, fg = {120, 180, 120}}},
+         {lbl = "parameter Three", render = "chart", chart_type = "line",
+          style = {pad = 4, fg = {120, 180, 220}}},
+      },
    },
 }
 

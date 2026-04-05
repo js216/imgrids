@@ -256,7 +256,7 @@ local NODE_KEYS = {
 	-- layout
 	size=1, weight=1,
 	-- behavior
-	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, pointer_weight=1, font=1, fg=1, dim=1, dim_zeros=1, colors=1,
+	press=1, focusable=1, focus_index=1, lbl=1, render=1, align=1, fmt=1, adjust=1, focused=1, overload=1, active=1, active_id=1, icon=1, bidir=1, derived=1, derived_sep=1, derived_fn=1, ribbon=1, pointer_weight=1, font=1, fg=1, dim=1, dim_zeros=1, colors=1, chart_type=1,
 	-- style (inline or via table)
 	style=1, leaf_style=1,
 	-- visual (when not using style= table)
@@ -964,6 +964,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				local inset_b = eff_pad(s, "bottom") + border_inset(s, "bottom")
 				local cw = math.max(0, w - inset_l - inset_r)
 				local ch = math.max(0, h - inset_t - inset_b)
+				local ct = node.chart_type or "bar"
 				ops[#ops + 1] = {
 					kind = "chart",
 					x = x, y = y, w = w, h = h,
@@ -971,6 +972,7 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 					lbl = lbl,
 					fg = s.fg,
 					bg = s.bg,
+					chart_type = ct,
 					press = press,
 					is_focusable = is_focusable,
 					focus_index = focus_index,
@@ -2310,14 +2312,65 @@ for _, name in ipairs(menu_names) do
 			e("                else { min_v -= range * 0.1; max_v += range * 0.1; }")
 			e("                let draw_h = %d_usize;", op.ch)
 			e("                let scale = (draw_h.saturating_sub(1)) as f64 / (max_v - min_v);")
-			e("                for i in 0..visible {")
-			e("                    let v = data[start + i];")
-			e("                    let norm = ((v - min_v) * scale) as usize;")
-			e("                    let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
-			e("                    let bar_h = (%d + draw_h - py).max(1);", op.cy)
-			e("                    let px = %d + %d - visible + i;", op.cx, op.cw)
-			e("                    backend.fill_rect(px, py, 1, bar_h, fg);")
-			e("                }")
+			if op.chart_type == "line" then
+				-- Wu anti-aliased line chart (1px)
+				e("                let (fr, fgc, fb) = fg.to_rgb();")
+				e("                let (br, bgc, bb) = bg.to_rgb();")
+				e("                let blend = |intensity: u8| -> Pixel {")
+				e("                    let a = intensity as u16;")
+				e("                    let ia = 255 - a;")
+				e("                    Pixel::from_rgb(")
+				e("                        ((fr as u16 * a + br as u16 * ia) / 255) as u8,")
+				e("                        ((fgc as u16 * a + bgc as u16 * ia) / 255) as u8,")
+				e("                        ((fb as u16 * a + bb as u16 * ia) / 255) as u8,")
+				e("                    )")
+				e("                };")
+				e("                let mut prev_yf: Option<f64> = None;")
+				e("                for i in 0..visible {")
+				e("                    let v = data[start + i];")
+				e("                    let yf = (v - min_v) * scale;")
+				e("                    let px = %d + %d - visible + i;", op.cx, op.cw)
+				e("                    if let Some(py) = prev_yf {")
+				e("                        let dy = yf - py;")
+				e("                        let steps = (dy.abs().ceil() as usize).max(1);")
+				e("                        for s in 1..steps {")
+				e("                            let t = s as f64 / steps as f64;")
+				e("                            let ym = py + dy * t;")
+				e("                            let iy = ym.floor() as usize;")
+				e("                            let frac = ym - ym.floor();")
+				e("                            if iy < draw_h {")
+				e("                                let dpy = %d + draw_h - 1 - iy;", op.cy)
+				e("                                backend.fill_rect(px - 1, dpy, 1, 1, blend(((1.0 - frac) * 255.0) as u8));")
+				e("                            }")
+				e("                            if iy + 1 < draw_h {")
+				e("                                let dpy = %d + draw_h - 2 - iy;", op.cy)
+				e("                                backend.fill_rect(px - 1, dpy, 1, 1, blend((frac * 255.0) as u8));")
+				e("                            }")
+				e("                        }")
+				e("                    }")
+				e("                    let iy = yf.floor() as usize;")
+				e("                    let frac = yf - yf.floor();")
+				e("                    if iy < draw_h {")
+				e("                        let dpy = %d + draw_h - 1 - iy;", op.cy)
+				e("                        backend.fill_rect(px, dpy, 1, 1, blend(((1.0 - frac) * 255.0) as u8));")
+				e("                    }")
+				e("                    if iy + 1 < draw_h {")
+				e("                        let dpy = %d + draw_h - 2 - iy;", op.cy)
+				e("                        backend.fill_rect(px, dpy, 1, 1, blend((frac * 255.0) as u8));")
+				e("                    }")
+				e("                    prev_yf = Some(yf);")
+				e("                }")
+			else
+				-- Bar chart (default)
+				e("                for i in 0..visible {")
+				e("                    let v = data[start + i];")
+				e("                    let norm = ((v - min_v) * scale) as usize;")
+				e("                    let py = %d + draw_h - 1 - norm.min(draw_h - 1);", op.cy)
+				e("                    let bar_h = (%d + draw_h - py).max(1);", op.cy)
+				e("                    let px = %d + %d - visible + i;", op.cx, op.cw)
+				e("                    backend.fill_rect(px, py, 1, bar_h, fg);")
+				e("                }")
+			end
 			e("            }")
 			e("        }")
 		end
