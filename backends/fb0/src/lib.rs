@@ -142,7 +142,7 @@ impl<P: PixelFormat> Framebuf<P> {
                 return Err("ioctl FBIOGET_FSCREENINFO failed".into());
             }
             if libc::ioctl(fd, FBIOBLANK, FB_BLANK_UNBLANK) < 0 {
-                return Err("ioctl FBIOBLANK failed".into());
+                eprintln!("warning: FBIOBLANK unblank failed (non-fatal)");
             }
         }
 

@@ -4,6 +4,8 @@ pub struct BufBackend<P: PixelFormat> {
     pub width: usize,
     pub height: usize,
     pub pixels: Vec<P>,
+    pub blit_count: usize,
+    pub fill_rect_count: usize,
 }
 
 impl<P: PixelFormat> BufBackend<P> {
@@ -12,7 +14,14 @@ impl<P: PixelFormat> BufBackend<P> {
             width: w,
             height: h,
             pixels: vec![P::default(); w * h],
+            blit_count: 0,
+            fill_rect_count: 0,
         }
+    }
+
+    pub fn reset_counts(&mut self) {
+        self.blit_count = 0;
+        self.fill_rect_count = 0;
     }
 
     /// Encode the framebuffer as a binary PPM (P6) image.
@@ -36,6 +45,7 @@ impl<P: PixelFormat> Backend<P> for BufBackend<P> {
     }
 
     fn fill_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: P) {
+        self.fill_rect_count += 1;
         for row in y..y + h {
             if row >= self.height {
                 break;
@@ -48,6 +58,7 @@ impl<P: PixelFormat> Backend<P> for BufBackend<P> {
     }
 
     fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize {
+        self.blit_count += 1;
         atlas.blit(&mut self.pixels, self.width, x, y, text)
     }
 
