@@ -1,6 +1,6 @@
 [alias]
 sdl = "build -p demo-sdl"
-fb32 = "build -p demo-fb32"
+fb32 = "build --release -p demo-fb32"
 arm = "build --release -p demo-arm --target armv7-unknown-linux-gnueabihf"
 wasm = "build -p demo-wasm --target wasm32-unknown-emscripten"
 
