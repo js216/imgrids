@@ -137,6 +137,7 @@ pub trait Renderer<P: PixelFormat> {
 
 pub mod raster;
 pub mod prebaked;
+pub mod ttf;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Backends

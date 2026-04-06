@@ -1272,8 +1272,8 @@ if need_raster then
 	e("type RasterAtlasP = RasterAtlas<Pixel>;")
 end
 if need_ttf then
-	e("use imgrids::prebaked::PrebakedAtlas;")
-	e("type PrebakedAtlasP = PrebakedAtlas<Pixel>;")
+	e("use imgrids::ttf::TtfAtlas;")
+	e("type TtfAtlasP = TtfAtlas<Pixel>;")
 end
 if #atlases > 0 then
 	e("use std::sync::OnceLock;")
@@ -1284,68 +1284,33 @@ local any_active = false
 
 e("")
 
--- Generate pre-baked font atlas data via Python script
-local ttf_atlases = {}
+-- Collect unique TTF font file paths and emit include_bytes! constants
+local font_consts = {} -- path -> const name
+local font_const_list = {} -- ordered for deterministic output
 for _, a in ipairs(atlases) do
 	if not is_raster(a.font) then
-		local spec = { id = a.varname:lower(), extra = a.extra }
-		if is_font_chain(a.font) then
-			spec.fonts = {}
-			for _, f in ipairs(a.font) do
-				spec.fonts[#spec.fonts+1] = {f[1], f[2]}
+		local paths = is_font_chain(a.font)
+			and a.font  -- {{path,sz}, {path,sz}}
+			or {a.font}  -- wrap single {"path",sz}
+		for _, fp in ipairs(paths) do
+			local path = fp[1]
+			if not font_consts[path] then
+				-- Derive const name from filename: "fonts/MyriadPro-Regular.ttf" -> "FONT_MYRIADPRO_REGULAR"
+				local base = path:match("([^/]+)%.ttf$") or path:match("([^/]+)$")
+				local name = "FONT_" .. base:upper():gsub("[^%w]", "_")
+				font_consts[path] = name
+				-- Resolve absolute path for include_bytes!
+				local abs_path = io.popen("realpath " .. path):read("*l")
+				font_const_list[#font_const_list+1] = { name = name, path = abs_path }
 			end
-		else
-			spec.fonts = {{a.font[1], a.font[2]}}
 		end
-		ttf_atlases[#ttf_atlases+1] = { spec = spec, atlas = a }
 	end
 end
 
-if #ttf_atlases > 0 then
-	-- Build JSON spec for the Python script
-	local json_parts = {}
-	for _, ta in ipairs(ttf_atlases) do
-		local s = ta.spec
-		local font_parts = {}
-		for _, f in ipairs(s.fonts) do
-			font_parts[#font_parts+1] = ('["%s", %d]'):format(f[1], f[2])
-		end
-		local extra_parts = {}
-		for _, cp in ipairs(s.extra) do
-			extra_parts[#extra_parts+1] = tostring(cp)
-		end
-		json_parts[#json_parts+1] = ('{"id": "%s", "fonts": [%s], "extra": [%s]}'):format(
-			s.id, table.concat(font_parts, ", "), table.concat(extra_parts, ", "))
+if #font_const_list > 0 then
+	for _, fc in ipairs(font_const_list) do
+		e("const %s: &[u8] = include_bytes!(%q);", fc.name, fc.path)
 	end
-	local json_str = "[" .. table.concat(json_parts, ", ") .. "]"
-
-	-- Find the Python script relative to this script
-	local script_dir = debug.getinfo(1, "S").source:match("@?(.*)/") or "."
-	local py_script = script_dir .. "/gen_font_atlas.py"
-	-- Output binary files to a cache directory alongside the generated ui.rs
-	-- Use current working directory + target/font_cache
-	local cwd = io.popen("pwd"):read("*l")
-	local cache_dir = cwd .. "/target/font_cache"
-	local py_cmd = ("echo '%s' | python3 '%s' '%s'"):format(json_str, py_script, cache_dir)
-	local handle = io.popen(py_cmd, "r")
-	local prebaked_src = handle:read("*a")
-	local ok = handle:close()
-	if not ok then
-		io.stderr:write("ERROR: gen_font_atlas.py failed\n")
-		os.exit(1)
-	end
-
-	-- Emit the prebaked data as a module
-	e("#[allow(clippy::all)]")
-	e("mod prebaked_fonts {")
-	for line in prebaked_src:gmatch("[^\n]+") do
-		if line:match("^%s*$") then
-			e("")
-		else
-			e("    %s", line)
-		end
-	end
-	e("}")
 	e("")
 end
 
@@ -1360,15 +1325,24 @@ for _, a in ipairs(atlases) do
 		e("    ))")
 		e("}")
 	else
-		local vid = a.varname
-		e("static %s: OnceLock<PrebakedAtlasP> = OnceLock::new();", a.varname)
-		e("fn %s() -> &'static PrebakedAtlasP {", a.fn_name)
-		e("    %s.get_or_init(|| PrebakedAtlasP::from_alpha(", a.varname)
-		e("        prebaked_fonts::%s_CELL_H,", vid)
-		e("        &prebaked_fonts::%s_ASCII_ADV,", vid)
-		e("        &prebaked_fonts::%s_ASCII_OFF,", vid)
-		e("        prebaked_fonts::%s_EXT,", vid)
-		e("        prebaked_fonts::%s_ALPHA,", vid)
+		-- Build font chain arguments: &[(data, size), ...]
+		local paths = is_font_chain(a.font)
+			and a.font
+			or {a.font}
+		local font_args = {}
+		for _, fp in ipairs(paths) do
+			local cname = font_consts[fp[1]]
+			font_args[#font_args+1] = ("(%s, %d)"):format(cname, fp[2])
+		end
+		local extra_args = {}
+		for _, cp in ipairs(a.extra) do
+			extra_args[#extra_args+1] = tostring(cp)
+		end
+		e("static %s: OnceLock<TtfAtlasP> = OnceLock::new();", a.varname)
+		e("fn %s() -> &'static TtfAtlasP {", a.fn_name)
+		e("    %s.get_or_init(|| TtfAtlasP::new(", a.varname)
+		e("        &[%s],", table.concat(font_args, ", "))
+		e("        &[%s],", table.concat(extra_args, ", "))
 		e("        %s, %s,", rgb_lit(a.fg), rgb_lit(a.bg))
 		e("    ))")
 		e("}")
