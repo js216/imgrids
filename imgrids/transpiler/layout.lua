@@ -2081,6 +2081,44 @@ for _, name in ipairs(menu_names) do
 	local chg_param = (#dyn_ops + #prog_ops + #chart_ops + (has_auto_active and 1 or 0)) > 0 and "changes" or "_changes"
 	e("    pub(super) fn update_params(&mut self, %s: &mut dyn Backend<Pixel>, %s: &[(&str, &str)]) {", be_param, chg_param)
 
+	-- Focus redraw FIRST so dynamic labels are blitted on top of borders
+	if has_focus then
+		e("        if self.last_drawn_focus != self.focused {")
+		e("            let prev = self.last_drawn_focus;")
+		e("            let focused = self.focused;")
+		e("            self.last_drawn_focus = focused;")
+		e("            self.draw_focus(backend, prev, focused);")
+		-- Reset dynamic label tracking for elements that overlap with changed focus
+		for _, op in ipairs(dyn_ops) do
+			for fi, fop in ipairs(fops) do
+				local fidx = fop.focus_index
+				if op.x >= fop.x and op.x < fop.x + fop.w
+				   and op.text_y >= fop.y and op.text_y < fop.y + fop.h then
+					e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
+					e("                self.dyn_%d_end = usize::MAX;", op.dyn_idx)
+					e("            }")
+					break
+				end
+			end
+		end
+		-- Reset progress bars that overlap with changed focus
+		for _, op in ipairs(prog_ops) do
+			if not op.is_focusable then
+				for fi, fop in ipairs(fops) do
+					local fidx = fop.focus_index
+					if op.px >= fop.x and op.px < fop.x + fop.w
+					   and op.py >= fop.y and op.py < fop.y + fop.h then
+						e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
+						e("                self.prog_%d_prev = usize::MAX;", op.prog_idx)
+						e("            }")
+						break
+					end
+				end
+			end
+		end
+		e("        }")
+	end
+
 	-- Derived labels: watch constituent params and rebuild
 	local derived_ops = {}
 	for _, op in ipairs(dyn_ops) do
@@ -2360,44 +2398,6 @@ for _, name in ipairs(menu_names) do
 			e("            }")
 			e("        }")
 		end
-	end
-
-	-- Focus redraw
-	if has_focus then
-		e("        if self.last_drawn_focus != self.focused {")
-		e("            let prev = self.last_drawn_focus;")
-		e("            let focused = self.focused;")
-		e("            self.last_drawn_focus = focused;")
-		e("            self.draw_focus(backend, prev, focused);")
-		-- Reset dynamic label tracking for elements that overlap with changed focus
-		for _, op in ipairs(dyn_ops) do
-			for fi, fop in ipairs(fops) do
-				local fidx = fop.focus_index
-				if op.x >= fop.x and op.x < fop.x + fop.w
-				   and op.text_y >= fop.y and op.text_y < fop.y + fop.h then
-					e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
-					e("                self.dyn_%d_end = usize::MAX;", op.dyn_idx)
-					e("            }")
-					break
-				end
-			end
-		end
-		-- Reset progress bars that overlap with changed focus
-		for _, op in ipairs(prog_ops) do
-			if not op.is_focusable then
-				for fi, fop in ipairs(fops) do
-					local fidx = fop.focus_index
-					if op.px >= fop.x and op.px < fop.x + fop.w
-					   and op.py >= fop.y and op.py < fop.y + fop.h then
-						e("            if prev == Some(%d) || focused == Some(%d) {", fidx, fidx)
-						e("                self.prog_%d_prev = usize::MAX;", op.prog_idx)
-						e("            }")
-						break
-					end
-				end
-			end
-		end
-		e("        }")
 	end
 
 	-- Auto-activate set_stay/set_param buttons BEFORE active state redraw
