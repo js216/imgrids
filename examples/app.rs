@@ -26,13 +26,30 @@ impl ui::Callbacks for GuiState {
     }
 }
 
-fn current_values(t: f32) -> Vec<(&'static str, String)> {
-    vec![
+fn xorshift32(state: &mut u32) -> u32 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    x
+}
+
+fn current_values(t: f32, rng: &mut u32) -> Vec<(&'static str, String)> {
+    let mut vals = vec![
         ("parameter One", format!("{:.3}", t.sin().abs())),
         ("parameter Two", format!("{:.3}", (t * 0.5).cos().abs() * 1.3)),
         ("parameter Three", format!("{:.3}", (t * 0.3).sin())),
         ("color_demo", "Whi\x01te+Gre\x00en \x02Red\x00\n\x03Small Yellow\x00 Normal".to_owned()),
-    ]
+    ];
+    for i in 1..=4 {
+        let v = (xorshift32(rng) % 1_000_000) as f64 / 1000.0;
+        let name: &'static str = match i {
+            1 => "rand_1", 2 => "rand_2", 3 => "rand_3", _ => "rand_4",
+        };
+        vals.push((name, format!("{:07.3}", v)));
+    }
+    vals
 }
 
 fn grid_values() -> Vec<(&'static str, String)> {
@@ -49,9 +66,10 @@ fn grid_values() -> Vec<(&'static str, String)> {
 fn main() {
     let mut backend = init_backend(ui::SCR_W, ui::SCR_H);
     let mut state = GuiState {
-        menu: ui::Menu::Hello, quit: false, t: 0.0,
+        menu: ui::Menu::RandomNumbers, quit: false, t: 0.0,
         pending_active: None, pending_grid: None, nav_changed: false,
     };
+    let mut rng: u32 = 2463534242;
     let mut router = ui::Router::new();
 
     // Initialize grid: set cell values and pre-focus center cell
@@ -63,7 +81,7 @@ fn main() {
     router.force_redraw();
 
     while !state.quit {
-        let mut raw = current_values(state.t);
+        let mut raw = current_values(state.t, &mut rng);
         raw.extend(grid_values());
         let changes: Vec<(&str, &str)> = raw.iter().map(|(n, v)| (*n, v.as_str())).collect();
 

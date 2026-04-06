@@ -36,6 +36,7 @@ local DEGREE     = utf8char(0x00B0)  -- °
 local extra = {0x00B1, 0x00B5, 0x00B0, 0x2212} -- ±, µ, °, −
 
 fonts = {
+	myriad_53    = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 53 },
 	myriad_large = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 32, extra = extra },
 	myriad_small = { "imgrids/src/fonts/MyriadPro-Regular.ttf", 20, extra = extra },
 	roboto_large = { "imgrids/src/fonts/RobotoMono-Regular.ttf", 32 },
@@ -86,17 +87,31 @@ end
 
 menus = {
 
+   RandomNumbers = {"col",
+      {"[1/35] Random Numbers",                                    size = 40, style = s_title},
+      {"2x2 grid of random floats\nin 53pt Myriad, updated every frame.", size = 50, style = s_desc},
+      nav("Popup", "Hello"),
+      {"row", leaf_style = {font = fonts.myriad_53, align = "center", border = {width = 0}},
+         {lbl = "rand_1"},
+         {lbl = "rand_2"},
+      },
+      {"row", leaf_style = {font = fonts.myriad_53, align = "center", border = {width = 0}},
+         {lbl = "rand_3"},
+         {lbl = "rand_4"},
+      },
+   },
+
    Hello = {"col",
-      {"[1/34] Col Layout",                                        size = 40, style = s_title},
+      {"[2/35] Col Layout",                                        size = 40, style = s_title},
       {"col stacks children vertically.\nEach child gets equal height.", size = 50, style = s_desc},
-      nav("Popup", "Rows"),
+      nav("RandomNumbers", "Rows"),
       {"First",  style = {bg = {60,  60,  120}}},
       {"Second", style = {bg = {60,  120, 60 }}},
       {"Third",  style = {bg = {120, 60,  60 }}},
    },
 
    Rows = {"col",
-      {"[2/34] Row Layout",                                        size = 40, style = s_title},
+      {"[3/35] Row Layout",                                        size = 40, style = s_title},
       {"row places children side by side.\n(equal width by default)", size = 50, style = s_desc},
       nav("Hello", "Cols"),
       {"row", "Left", "Center", "Right"},
@@ -104,7 +119,7 @@ menus = {
    },
 
    Cols = {"col",
-      {"[3/34] Col + Row Nesting",                                 size = 40, style = s_title},
+      {"[4/35] Col + Row Nesting",                                 size = 40, style = s_title},
       {"col inside a row:\neach column stacks its own children.", size = 50, style = s_desc},
       nav("Rows", "Weighted"),
       {"row",
@@ -115,14 +130,14 @@ menus = {
    },
 
    Weighted = {"col",
-      {"[4/34] Proportional Weights",                               size = 40, style = s_title},
+      {"[5/35] Proportional Weights",                               size = 40, style = s_title},
       {"weight= sets proportional space.\nDefault weight is 1.", size = 50, style = s_desc},
       nav("Cols", "Fixed"),
       {"row", "weight 1", {"weight 2", weight=2}, {"weight 3", weight=3}},
    },
 
    Fixed = {"col",
-      {"[5/34] Fixed Sizes",                                       size = 40, style = s_title},
+      {"[6/35] Fixed Sizes",                                       size = 40, style = s_title},
       {"size= gives a child a fixed pixel size.\nWeighted children share the rest.", size = 50, style = s_desc},
       nav("Weighted", "CellStyle"),
       {"size=70 (fixed)",     size = 70},
@@ -130,7 +145,7 @@ menus = {
    },
 
    CellStyle = {"col",
-      {"[6/34] Cell Styling",                                      size = 40, style = s_title},
+      {"[7/35] Cell Styling",                                      size = 40, style = s_title},
       {"Each cell carries a style= table.\nReuse named tables to share style.", size = 50, style = s_desc},
       nav("Fixed", "LeafStyle"),
       {"row",
@@ -142,7 +157,7 @@ menus = {
    },
 
    LeafStyle = {"col",
-      {"[7/34] Leaf Style",                                       size = 40, style = s_title},
+      {"[8/35] Leaf Style",                                       size = 40, style = s_title},
       {"leaf_style= sets style for all leaves\nin a container. Per-node style= overrides.", size = 50, style = s_desc},
       nav("CellStyle", "ContainerBg"),
       {"row", leaf_style = {bg = {40, 40, 100}, fg = colors.white},
@@ -162,7 +177,7 @@ menus = {
    },
 
    ContainerBg = {"col",
-      {"[8/34] Container Background",                              size = 40, style = s_title},
+      {"[9/35] Container Background",                              size = 40, style = s_title},
       {"style={bg=...} on a container fills\nbehind all children.", size = 50, style = s_desc},
       nav("LeafStyle", "Pad"),
       {"row",
@@ -178,7 +193,7 @@ menus = {
    },
 
    Pad = {"col",
-      {"[9/34] Padding",                                           size = 40, style = s_title},
+      {"[10/35] Padding",                                           size = 40, style = s_title},
       {"pad= adds internal space.\npad_left/top/right/bottom: per-side.", size = 50, style = s_desc},
       nav("ContainerBg", "Margin"),
       {"row",
@@ -194,7 +209,7 @@ menus = {
    },
 
    Margin = {"col",
-      {"[10/34] Margins",                                           size = 40, style = s_title},
+      {"[11/35] Margins",                                           size = 40, style = s_title},
       {"margin= shrinks from outside.\nmargin_left/top/right/bottom: per-side.", size = 50, style = s_desc},
       nav("Pad", "FlushCells"),
       {"row",
@@ -210,7 +225,7 @@ menus = {
    },
 
    FlushCells = {"col",
-      {"[11/34] Flush Cells",                                       size = 40, style = s_title},
+      {"[12/35] Flush Cells",                                       size = 40, style = s_title},
       {"margin_left=0 / margin_right=0 makes\nadjacent cells touch (no gap).", size = 50, style = s_desc},
       nav("Margin", "Borders"),
       {"row",
@@ -230,7 +245,7 @@ menus = {
 
    Borders = {"col",
       leaf_style = {border = {width = 0}},  -- reset so the demos below are unambiguous
-      {"[12/34] Borders",                                           size = 40, style = s_title},
+      {"[13/35] Borders",                                           size = 40, style = s_title},
       {"border= draws a border.\nside= restricts to one edge.", size = 50, style = s_desc},
       nav("FlushCells", "ContainerBorder"),
       {"row", "no border", "no border", "no border"},
@@ -245,7 +260,7 @@ menus = {
    },
 
    ContainerBorder = {"col",
-      {"[13/34] Container Border",                                  size = 40, style = s_title},
+      {"[14/35] Container Border",                                  size = 40, style = s_title},
       {"border= on a container is only drawn\nwhen explicitly set (not inherited).", size = 50, style = s_desc},
       nav("Borders", "Clickable"),
       {"row", leaf_style = {border = {width = 0}},
@@ -265,7 +280,7 @@ menus = {
    },
 
    Clickable = {"col",
-      {"[14/34] Press Callbacks",                                   size = 40, style = s_title},
+      {"[15/35] Press Callbacks",                                   size = 40, style = s_title},
       {"press={fn, args...} triggers\na Callbacks method on press.", size = 50, style = s_desc},
       nav("ContainerBorder", "Focusable"),
       {'press={"click"}',          press = {"click"}},
@@ -274,7 +289,7 @@ menus = {
    },
 
    Focusable = {"col",
-      {"[15/34] Focus Behavior",                                    size = 40, style = s_title},
+      {"[16/35] Focus Behavior",                                    size = 40, style = s_title},
       {"Focused cell redraws with style.focused.\nDefault: focusable iff press= is set.", size = 50, style = s_desc},
       nav("Clickable", "FocusDisable"),
       {"row",
@@ -292,7 +307,7 @@ menus = {
    },
 
    FocusDisable = {"col",
-      {"[16/34] Focus Disable",                                     size = 40, style = s_title},
+      {"[17/35] Focus Disable",                                     size = 40, style = s_title},
       {"focusable=false on a press= cell:\nbutton works but does not highlight.", size = 50, style = s_desc},
       nav("Focusable", "Dynamic"),
       {"row",
@@ -310,7 +325,7 @@ menus = {
    },
 
    Dynamic = {"col",
-      {"[17/34] Dynamic Labels",                                    size = 40, style = s_title},
+      {"[18/35] Dynamic Labels",                                    size = 40, style = s_title},
       {"lbl= cells get values via update_params().\nThey start blank; populate on first update.", size = 50, style = s_desc},
       nav("FocusDisable", "DynUpdate"),
       {lbl = "parameter One"},
@@ -318,7 +333,7 @@ menus = {
    },
 
    DynUpdate = {"col",
-      {"[18/34] Dynamic Update API",                                size = 40, style = s_title},
+      {"[19/35] Dynamic Update API",                                size = 40, style = s_title},
       {"API is update_params() (not update_changes).\nPass &[(&str, &str)] to update lbl= cells.", size = 50, style = s_desc},
       nav("Dynamic", "Progress"),
       {"row",
@@ -332,7 +347,7 @@ menus = {
    },
 
    Progress = {"col",
-      {"[19/34] Progress Bar",                                      size = 40, style = s_title},
+      {"[20/35] Progress Bar",                                      size = 40, style = s_title},
       {'render="progress bar":\nlbl= value is a float in [0,1].', size = 50, style = s_desc},
       nav("DynUpdate", "Complex"),
       {lbl = "parameter One", render = "progress bar", style={pad=0}},
@@ -346,7 +361,7 @@ menus = {
    },
 
    Complex = {"col",
-      {"[20/34] Nested Containers",                                 size = 40, style = s_title},
+      {"[21/35] Nested Containers",                                 size = 40, style = s_title},
       {"Containers nest freely:\ncol in row, row in col...", size = 50, style = s_desc},
       nav("Progress", "Alignment"),
       {"row",
@@ -359,7 +374,7 @@ menus = {
    },
 
    Alignment = {"col",
-      {"[21/34] Text Alignment",                                    size = 40, style = s_title},
+      {"[22/35] Text Alignment",                                    size = 40, style = s_title},
       {"align= positions text within its cell.\nleft (default), center, right.", size = 50, style = s_desc},
       nav("Complex", "AlignStyle"),
          {"Left (default)"},
@@ -368,7 +383,7 @@ menus = {
    },
 
    AlignStyle = {"col",
-      {"[22/34] Align in Style Tables",                             size = 40, style = s_title},
+      {"[23/35] Align in Style Tables",                             size = 40, style = s_title},
       {"align works as flat prop, inside style=,\nand via leaf_style= on containers.", size = 50, style = s_desc},
       nav("Alignment", "MultilineAlign"),
       {"align=\"center\" (flat)", align = "center"},
@@ -380,7 +395,7 @@ menus = {
    },
 
    MultilineAlign = {"col",
-      {"[23/34] Multiline Alignment",                               size = 40, style = s_title},
+      {"[24/35] Multiline Alignment",                               size = 40, style = s_title},
       {"Multiline text respects align=.\nEach line is aligned independently.", size = 50, style = s_desc},
       nav("AlignStyle", "DynAlign"),
       {"row",
@@ -391,7 +406,7 @@ menus = {
    },
 
    DynAlign = {"col",
-      {"[24/34] Dynamic Label Alignment",                           size = 40, style = s_title},
+      {"[25/35] Dynamic Label Alignment",                           size = 40, style = s_title},
       {"lbl= cells also support align=.\nUses text_width() at runtime.", size = 50, style = s_desc},
       nav("MultilineAlign", "FontIcons"),
       {lbl = "parameter One", align = "left"},
@@ -400,7 +415,7 @@ menus = {
    },
 
    FontIcons = {"col",
-      {"[25/34] Font Chain + Icons + Extra",                        size = 40, style = s_title},
+      {"[26/35] Font Chain + Icons + Extra",                        size = 40, style = s_title},
       {"Font chain: primary + FA fallback +\nextra code points (" .. PLUS_MINUS .. " " .. MICRO .. " " .. DEGREE .. ").", size = 50, style = s_desc},
       nav("DynAlign", "FocusGroups"),
       {"row", leaf_style = {font = fonts.myriad_icons_extra},
@@ -425,15 +440,15 @@ menus = {
       menu_align = {math.floor(0.5 * screen.width), math.floor(0.5 * screen.height)},
       menu_anchor = "center",
       border = {width = 2, color = colors.white},
-      {"[34/34] Popup Positioning",                                 size = 40, style = s_title},
+      {"[35/35] Popup Positioning",                                 size = 40, style = s_title},
       {"menu_size={w,h}: menu size in pixels.\nmenu_align={x,y}+menu_anchor=: position.", size = 50, style = s_desc},
-      nav("Grid", "Hello"),
+      nav("Grid", "RandomNumbers"),
    },
 }
 
 -- Insert FocusGroups and Overload before Popup in navigation
 menus.FocusGroups = {"col",
-   {"[26/34] Focus Groups",                                       size = 40, style = s_title},
+   {"[27/35] Focus Groups",                                       size = 40, style = s_title},
    {"focus_index= groups elements into\na single focusable unit.", size = 50, style = s_desc},
    nav("FontIcons", "Overload"),
    {"row",
@@ -448,7 +463,7 @@ menus.FocusGroups = {"col",
 }
 
 menus.Overload = {"col",
-   {"[27/34] Progress Bar Overload",                               size = 40, style = s_title},
+   {"[28/35] Progress Bar Overload",                               size = 40, style = s_title},
    {"overload={r,g,b}: bar turns this\ncolor when value reaches 1.0.", size = 50, style = s_desc},
    nav("FocusGroups", "Icons"),
    {"row",
@@ -466,7 +481,7 @@ menus.Overload = {"col",
 }
 
 menus.Icons = {"col",
-   {"[28/34] SVG Icons",                                          size = 40, style = s_title},
+   {"[29/35] SVG Icons",                                          size = 40, style = s_title},
    {"icon= renders a pre-rasterized SVG.\nAlpha-blended at draw time (fg/bg).", size = 50, style = s_desc},
    nav("Overload", "ActiveStyle"),
    {"row", leaf_style = {border = {width = 0}},
@@ -508,7 +523,7 @@ menus.Icons = {"col",
 }
 
 menus.ActiveStyle = {"col",
-   {"[29/34] Active Styling",                                     size = 40, style = s_title},
+   {"[30/35] Active Styling",                                     size = 40, style = s_title},
    {"active={border=...}: app-controlled\nstyle via set_active(text, bool).", size = 50, style = s_desc},
    nav("Icons", "MidString"),
    {"row",
@@ -529,7 +544,7 @@ menus.ActiveStyle = {"col",
 }
 
 menus.MidString = {"col",
-   {"[30/34] Multi-Style Strings",                                size = 40, style = s_title},
+   {"[31/35] Multi-Style Strings",                                size = 40, style = s_title},
    {"colors= defines alternate styles.\n\\x01-\\x09 switch, \\x00 restores default.", size = 50, style = s_desc},
    nav("ActiveStyle", "Widgets"),
    -- Dynamic label with color escape codes + newlines
@@ -556,7 +571,7 @@ local function hue_ribbon(t)
 end
 
 menus.Widgets = {"col",
-   {"[31/34] Widgets: Progress, Slider, Charts",                 size = 40, style = s_title},
+   {"[32/35] Widgets: Progress, Slider, Charts",                 size = 40, style = s_title},
    {"Bar chart (default) vs line chart (anti-aliased).",         size = 30, style = s_desc},
    nav("MidString", "RightAlign"),
    {"row",
@@ -579,7 +594,7 @@ menus.Widgets = {"col",
 local MINUS_SIGN = utf8char(0x2212)
 
 menus.RightAlign = {"col",
-   {"[32/34] Right Align",                                       size = 40, style = s_title},
+   {"[33/35] Right Align",                                       size = 40, style = s_title},
    {"Right-aligned numeric values in a\ntwo-column table.", size = 50, style = s_desc},
    nav("Widgets", "Grid"),
    {"row",
@@ -596,7 +611,7 @@ local s_cell = {bg = {30, 30, 80}, margin = 4, align = "center",
                 border = {width = 1, color = {100,100,100}}}
 
 menus.Grid = {"col",
-   {"[33/34] Focus Grid",                                        size = 40, style = s_title},
+   {"[34/35] Focus Grid",                                        size = 40, style = s_title},
    {"Click a cell to focus it.\nlabel_bounds + last_press for hit testing.", size = 50, style = s_desc},
    nav("RightAlign", "Popup"),
    {"row",
