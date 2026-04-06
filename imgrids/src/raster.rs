@@ -83,6 +83,16 @@ impl<P: PixelFormat> Renderer<P> for RasterAtlas<P> {
         cx
     }
 
+    fn blit_char(&self, fb: &mut [P], stride: usize, x: usize, y: usize, ch: char) -> usize {
+        let (gw, gh) = (self.glyph_w, self.glyph_h);
+        let src = self.glyph(ch as usize);
+        for gy in 0..gh {
+            let dst_start = (y + gy) * stride + x;
+            fb[dst_start..dst_start + gw].copy_from_slice(&src[gy * gw..(gy + 1) * gw]);
+        }
+        x + gw
+    }
+
     fn cell_height(&self) -> usize {
         self.glyph_h
     }

@@ -52,6 +52,13 @@ impl Backend<P> for WebBackend {
         end_x
     }
 
+    fn blit_char(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, ch: char) -> usize {
+        let width = self.width;
+        let end_x = atlas.blit_char(&mut self.pixels, width, x, y, ch);
+        self.dirty = true;
+        end_x
+    }
+
     fn blit_alpha(&mut self, icon: &imgrids::Icon, fg: P, bg: P) {
         imgrids::blit_alpha_buf(&mut self.pixels, self.width, icon, fg, bg);
         self.dirty = true;

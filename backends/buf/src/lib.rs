@@ -62,6 +62,11 @@ impl<P: PixelFormat> Backend<P> for BufBackend<P> {
         atlas.blit(&mut self.pixels, self.width, x, y, text)
     }
 
+    fn blit_char(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, ch: char) -> usize {
+        self.blit_count += 1;
+        atlas.blit_char(&mut self.pixels, self.width, x, y, ch)
+    }
+
     fn blit_alpha(&mut self, icon: &Icon, fg: P, bg: P) {
         blit_alpha_buf(&mut self.pixels, self.width, icon, fg, bg);
     }

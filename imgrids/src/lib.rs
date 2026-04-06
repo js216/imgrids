@@ -125,6 +125,9 @@ pub trait Renderer<P: PixelFormat> {
     /// past the last drawn pixel (i.e. x + rendered width).
     fn blit(&self, fb: &mut [P], stride: usize, x: usize, y: usize, text: &str) -> usize;
 
+    /// Draw a single character. Returns x past the drawn glyph.
+    fn blit_char(&self, fb: &mut [P], stride: usize, x: usize, y: usize, ch: char) -> usize;
+
     fn cell_height(&self) -> usize;
     fn char_width(&self, c: char) -> usize;
     fn text_width(&self, text: &str) -> usize {
@@ -184,6 +187,9 @@ pub trait Backend<P: PixelFormat> {
 
     fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize;
 
+    /// Blit a single character without String allocation.
+    fn blit_char(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, ch: char) -> usize;
+
     /// Blit an alpha-mask icon.
     fn blit_alpha(&mut self, icon: &Icon, fg: P, bg: P);
 
@@ -226,6 +232,9 @@ impl<P: PixelFormat> Backend<P> for Box<dyn Backend<P>> {
     }
     fn blit(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str) -> usize {
         (**self).blit(atlas, x, y, text)
+    }
+    fn blit_char(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, ch: char) -> usize {
+        (**self).blit_char(atlas, x, y, ch)
     }
     fn blit_clipped(&mut self, atlas: &dyn Renderer<P>, x: usize, y: usize, text: &str, max_x: usize) -> usize {
         (**self).blit_clipped(atlas, x, y, text, max_x)

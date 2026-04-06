@@ -1376,6 +1376,14 @@ for _, a in ipairs(atlases) do
 	e("")
 end
 
+-- Eager atlas init
+e("pub fn init_atlases() {")
+for _, a in ipairs(atlases) do
+	e("    let _ = %s();", a.fn_name)
+end
+e("}")
+e("")
+
 -- Screen dimensions
 e("pub const SCR_W: usize = %d;", screen.width)
 e("pub const SCR_H: usize = %d;", screen.height)
@@ -1623,9 +1631,9 @@ local function emit_dyn_blit(op, indent, val_expr)
 		end
 		e("%s{", indent)
 		e("%s    let prev_end = %s;", indent, dyn_end)
+		local clear_h = op.h - (op.text_y - op.y)
 		e("%s    let clear_w = if prev_end == usize::MAX { %d } else { prev_end.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
-		local clear_h = op.h - (op.text_y - op.y)
 		e("%s    backend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, clear_h, bg)
 		if op.align == "center" then
 			e("%s    let tw: usize = %s.chars().filter(|&c| c > '\\x09' || c == '\\n').map(|c| if c == '\\n' { 0 } else { %s().char_width(c) }).sum();",
@@ -1652,8 +1660,7 @@ local function emit_dyn_blit(op, indent, val_expr)
 		e("%s            continue;", indent)
 		e("%s        }", indent)
 		e("%s        if c == '\\n' { cy += %s().cell_height() + 2; cx = start_x; continue; }", indent, atlas_fn)
-		e("%s        let s: String = c.to_string();", indent)
-		e("%s        cx = backend.blit(cur, cx, cy, &s);", indent)
+		e("%s        cx = backend.blit_char(cur, cx, cy, c);", indent)
 		e("%s    }", indent)
 		e("%s    %s = cx;", indent, dyn_end)
 		e("%s}", indent)
@@ -1675,7 +1682,7 @@ local function emit_dyn_blit(op, indent, val_expr)
 		e("%s    backend.fill_rect(end_x, %d, prev - end_x, %d, %s);", indent, op.text_y, ch, bg)
 		e("%s}", indent)
 	else
-		-- Center/right: clear old area then blit at computed x
+		-- Center/right: clear full cell, then blit at computed x
 		if not use_local_a then
 			e("%slet a = %s();", indent, atlas_fn)
 		end
@@ -2949,18 +2956,7 @@ do
 			else
 				e("            let raw = format!(\"{:.%d}\", n);", prec)
 			end
-			e("            let formatted = if let Some(dot) = raw.find('.') {")
-			e("                let (int_str, dec_with_dot) = raw.split_at(dot);")
-			e("                let dec_part = &dec_with_dot[1..];")
-			e("                let grouped_dec: String = dec_part.chars().enumerate().map(|(i, c)| {")
-			e("                    if i > 0 && i % 3 == 0 { format!(\" {}\", c) } else { c.to_string() }")
-			e("                }).collect();")
-			e("                let grouped_int = crate::group_int_digits(int_str);")
-			e("                format!(\"{}.{}\", grouped_int, grouped_dec)")
-			e("            } else {")
-			e("                crate::group_int_digits(&raw)")
-			e("            };")
-			e("            let formatted = formatted.replacen('-', \"\\u{2212}\", 1);")
+			e("            let formatted = crate::format_grouped(&raw);")
 			if unit then
 				if is_angle then
 					e("            Some(format!(\"{}%s\", formatted))", unit)

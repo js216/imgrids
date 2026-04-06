@@ -108,18 +108,22 @@ pub struct Framebuf<P: PixelFormat> {
     input_fd: Option<i32>,
     touch: TouchState,
     events: Vec<InputEvent>,
+    /// Shadow pixel buffer for dirty-rect tracking.
+    shadow: Vec<P>,
+    dirty_x0: usize,
+    dirty_y0: usize,
+    dirty_x1: usize,
+    dirty_y1: usize,
     _pixel: std::marker::PhantomData<P>,
 }
 
 impl<P: PixelFormat> Framebuf<P> {
-    /// Slice into the mmap'd pixel buffer.  Lifetime is tied to `&mut self`.
-    fn pixels_mut(&mut self) -> &mut [P] {
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                self.mmap_ptr as *mut P,
-                self.mmap_size / size_of::<P>(),
-            )
-        }
+    #[inline]
+    fn mark_dirty(&mut self, x: usize, y: usize, x_end: usize, y_end: usize) {
+        if x < self.dirty_x0 { self.dirty_x0 = x; }
+        if y < self.dirty_y0 { self.dirty_y0 = y; }
+        if x_end > self.dirty_x1 { self.dirty_x1 = x_end; }
+        if y_end > self.dirty_y1 { self.dirty_y1 = y_end; }
     }
 }
 
@@ -188,16 +192,23 @@ impl<P: PixelFormat> Framebuf<P> {
             }
         };
 
+        let w = vinfo.xres as usize;
+        let h = vinfo.yres as usize;
         Ok(Framebuf {
             stride,
-            width: vinfo.xres as usize,
-            height: vinfo.yres as usize,
+            width: w,
+            height: h,
             fd,
             mmap_ptr,
             mmap_size,
             input_fd,
             touch: TouchState::new(),
             events: Vec::new(),
+            shadow: vec![P::default(); stride * (h + 64)],
+            dirty_x0: w,
+            dirty_y0: h,
+            dirty_x1: 0,
+            dirty_y1: 0,
             _pixel: std::marker::PhantomData,
         })
     }
@@ -206,7 +217,11 @@ impl<P: PixelFormat> Framebuf<P> {
 impl<P: PixelFormat> Backend<P> for Framebuf<P> {
     #[inline]
     fn clear(&mut self, color: P) {
-        self.pixels_mut().fill(color);
+        self.shadow.fill(color);
+        self.dirty_x0 = 0;
+        self.dirty_y0 = 0;
+        self.dirty_x1 = self.width;
+        self.dirty_y1 = self.height;
     }
 
     fn fill_rect(
@@ -217,25 +232,64 @@ impl<P: PixelFormat> Backend<P> for Framebuf<P> {
         h: usize,
         color: P,
     ) {
+        let x_end = (x + w).min(self.width);
+        let y_end = (y + h).min(self.height);
+        if x >= x_end || y >= y_end { return; }
         let stride = self.stride;
-        let pixels = self.pixels_mut();
-        for row in y..y + h {
+        let w = x_end - x;
+        for row in y..y_end {
             let start = row * stride + x;
-            pixels[start..start + w].fill(color);
+            self.shadow[start..start + w].fill(color);
         }
+        self.mark_dirty(x, y, x_end, y_end);
     }
 
     fn blit(&mut self, atlas: &dyn imgrids::Renderer<P>, x: usize, y: usize, text: &str) -> usize {
         let stride = self.stride;
-        let pixels = self.pixels_mut();
-        atlas.blit(pixels, stride, x, y, text)
+        let end_x = atlas.blit(&mut self.shadow, stride, x, y, text);
+        let h = atlas.cell_height();
+        self.mark_dirty(x, y, end_x, y + h);
+        end_x
     }
 
+    fn blit_char(&mut self, atlas: &dyn imgrids::Renderer<P>, x: usize, y: usize, ch: char) -> usize {
+        let stride = self.stride;
+        let end_x = atlas.blit_char(&mut self.shadow, stride, x, y, ch);
+        let h = atlas.cell_height();
+        self.mark_dirty(x, y, end_x, y + h);
+        end_x
+    }
 
     fn blit_alpha(&mut self, icon: &imgrids::Icon, fg: P, bg: P) {
+        imgrids::blit_alpha_buf(&mut self.shadow, self.stride, icon, fg, bg);
+        self.mark_dirty(icon.x, icon.y, icon.x + icon.w, icon.y + icon.h);
+    }
+
+    fn flush(&mut self) {
+        let x0 = self.dirty_x0;
+        let y0 = self.dirty_y0;
+        let x1 = self.dirty_x1.min(self.width);
+        let y1 = self.dirty_y1.min(self.height);
+        if x0 >= x1 || y0 >= y1 { return; }
+        self.dirty_x0 = self.width;
+        self.dirty_y0 = self.height;
+        self.dirty_x1 = 0;
+        self.dirty_y1 = 0;
+
         let stride = self.stride;
-        let pixels = self.pixels_mut();
-        imgrids::blit_alpha_buf(pixels, stride, icon, fg, bg);
+        let w = x1 - x0;
+        let fb_ptr = self.mmap_ptr as *mut P;
+        let shadow = &self.shadow;
+        for row in y0..y1 {
+            let off = row * stride + x0;
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    shadow.as_ptr().add(off),
+                    fb_ptr.add(off),
+                    w,
+                );
+            }
+        }
     }
 
     fn poll_events(&mut self) -> &[InputEvent] {
