@@ -7,7 +7,6 @@ fn main() {
     println!("cargo:rerun-if-changed=../demo.lua");
     println!("cargo:rerun-if-changed=../../imgrids/transpiler/layout.lua");
     println!("cargo:rerun-if-changed=../../imgrids/transpiler/symbols.lua");
-    println!("cargo:rerun-if-changed=../../target/font_cache");
 
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let ui_dir = PathBuf::from(&crate_dir).join("src/ui");

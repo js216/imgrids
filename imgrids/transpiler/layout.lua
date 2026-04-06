@@ -1376,10 +1376,11 @@ for _, a in ipairs(atlases) do
 	e("")
 end
 
--- Eager atlas init
+-- Eager atlas initializer
+e("#[allow(dead_code)]")
 e("pub fn init_atlases() {")
 for _, a in ipairs(atlases) do
-	e("    let _ = %s();", a.fn_name)
+	e("    %s();", a.fn_name)
 end
 e("}")
 e("")
