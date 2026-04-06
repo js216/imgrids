@@ -1611,6 +1611,9 @@ local function emit_dyn_blit(op, indent, val_expr)
 		e("%s{", indent)
 		e("%s    let prev_end = %s;", indent, dyn_end)
 		local clear_h = op.h - (op.text_y - op.y)
+		if op.foc and op.foc.border and op.foc.border.width then
+			clear_h = clear_h - op.foc.border.width
+		end
 		e("%s    let clear_w = if prev_end == usize::MAX { %d } else { prev_end.saturating_sub(%d) };",
 			indent, op.inner_w, op.text_x)
 		e("%s    backend.fill_rect(%d, %d, clear_w, %d, %s);", indent, op.text_x, op.text_y, clear_h, bg)
