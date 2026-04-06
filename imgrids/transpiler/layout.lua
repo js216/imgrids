@@ -864,7 +864,11 @@ local function layout_node(node, x, y, w, h, ops, leaf_style)
 				io.stderr:write(("ERROR: icon must be an .svg file: %s\n"):format(icon_path))
 				os.exit(1)
 			end
-			local alpha_path = svg_base .. "_" .. target_h .. ".alpha"
+			-- Put rendered icon alphas in target/icon_cache/ instead of next to SVGs
+			local icon_cache = "target/icon_cache"
+			os.execute("mkdir -p " .. icon_cache)
+			local svg_basename = svg_base:match("([^/]+)$")
+			local alpha_path = icon_cache .. "/" .. svg_basename .. "_" .. target_h .. ".alpha"
 			-- Render if .alpha is missing or older than .svg
 			local need_render = true
 			local af = io.open(alpha_path, "rb")
